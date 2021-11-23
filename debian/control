@@ -1,0 +1,16 @@
+Source: system76-scheduler
+Section: utils
+Priority: optional
+Maintainer: Michael Murphy <mmstick@pm.me>
+Build-Depends:
+    cargo,
+    debhelper-compat (=10),
+    rustc (>=1.53),
+Standards-Version: 4.1.1
+Homepage: https://github.com/pop-os/scheduler
+
+Package: system76-scheduler
+Architecture: amd64 arm64
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Description: Oneshot service to tweak the CFS scheduler on boot
+ Uses settings from the Zen kernel by default.

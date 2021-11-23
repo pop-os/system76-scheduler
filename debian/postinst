@@ -1,0 +1,9 @@
+#!/bin/sh
+set -x
+
+systemctl enable com.system76.Scheduler
+systemctl restart com.system76.Scheduler
+
+#DEBHELPER#
+
+exit 0
