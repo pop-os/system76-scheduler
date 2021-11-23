@@ -1,0 +1,10 @@
+[Unit]
+Description=Automatically configure CPU scheduler for responsiveness on AC
+After=hibernate.target hybrid-sleep.target suspend.target suspend-then-hibernate.target
+
+[Service]
+ExecStart=/usr/bin/system76-scheduler daemon
+Type=simple
+
+[Install]
+WantedBy=multi-user.target hibernate.target hybrid-sleep.target suspend.target suspend-then-hibernate.target

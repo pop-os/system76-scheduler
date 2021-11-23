@@ -1,0 +1,17 @@
+[package]
+name = "system76-scheduler"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0.45"
+argh = "0.1.6"
+futures = "0.3.17"
+glommio = "0.6.0"
+num_cpus = "1.13.0"
+postage = "0.4.1"
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "1.0.30"
+toml = "0.5.8"
+zbus = "2.0.0-beta.7"
+zvariant = "2.0.0-beta.7"
