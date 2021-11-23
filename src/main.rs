@@ -17,7 +17,6 @@ use crate::paths::SchedPaths;
 use crate::upower::UPowerProxy;
 use argh::FromArgs;
 use dbus::{CpuMode, Server};
-use glommio::LocalExecutorBuilder;
 use postage::prelude::*;
 use zbus::Connection;
 
@@ -28,7 +27,7 @@ enum Event {
 }
 
 fn main() -> anyhow::Result<()> {
-    LocalExecutorBuilder::new().make().unwrap().run(async move {
+    futures::executor::block_on(async move {
         let connection = Connection::system().await?;
 
         let args: Args = argh::from_env();

@@ -3,7 +3,6 @@ Description=Automatically configure CPU scheduler for responsiveness on AC
 After=hibernate.target hybrid-sleep.target suspend.target suspend-then-hibernate.target
 
 [Service]
-LimitMEMLOCK=1M
 ExecStart=/usr/bin/system76-scheduler daemon
 Type=dbus
 BusName=com.system76.Scheduler
