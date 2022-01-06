@@ -23,7 +23,7 @@ bandwidth_size: 5us
 
 ### Responsive
 
-Slightly reduces time given to CPU-bound tasks to give more time to other processes, particularly those awaiting and responding to user inputs. This can significantly improve desktop responsiveness at high CPU load for a slight penalty in throughput on CPU-bound tasks.
+Slightly reduces time given to CPU-bound tasks to give more time to other processes, particularly those awaiting and responding to user inputs. This can significantly improve desktop responsiveness for a slight penalty in throughput on CPU-bound tasks.
 
 ```yaml
 latency: 4ns
