@@ -4,9 +4,23 @@
 use crate::Event;
 use postage::mpsc::Sender;
 use postage::prelude::*;
-use zvariant::derive::Type;
+use serde_repr::{Deserialize_repr, Serialize_repr};
+use zvariant::{OwnedValue, Type, Value};
 
-#[derive(Copy, Clone, Deserialize, Serialize, Type)]
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    Deserialize_repr,
+    Serialize_repr,
+    Value,
+    OwnedValue,
+    Type,
+)]
+#[repr(u8)]
 pub enum CpuMode {
     Auto = 0,
     Custom = 1,
@@ -26,6 +40,7 @@ pub(crate) struct Server {
     default_path = "/com/system76/Scheduler"
 )]
 pub trait Client {
+    #[dbus_interface(property)]
     fn cpu_mode(&self) -> zbus::fdo::Result<CpuMode>;
 
     #[dbus_proxy(property)]
@@ -38,18 +53,14 @@ pub trait Client {
 
 #[dbus_interface(name = "com.system76.Scheduler")]
 impl Server {
+    #[dbus_interface(property)]
     fn cpu_mode(&self) -> CpuMode {
         self.cpu_mode
     }
 
     #[dbus_interface(property)]
     fn cpu_profile(&self) -> &str {
-        match self.cpu_mode {
-            CpuMode::Auto => "auto",
-            CpuMode::Custom => &self.cpu_profile,
-            CpuMode::Default => "default",
-            CpuMode::Responsive => "responsive",
-        }
+        &self.cpu_profile
     }
 
     async fn set_cpu_mode(&mut self, cpu_mode: CpuMode) {

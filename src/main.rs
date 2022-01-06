@@ -2,19 +2,15 @@
 // SPDX-License-Identifier: MPL-2.0
 
 #[macro_use]
-extern crate serde;
-#[macro_use]
 extern crate zbus;
 
 mod config;
 mod cpu;
 mod dbus;
 mod paths;
-mod upower;
 
 use crate::config::Config;
 use crate::paths::SchedPaths;
-use crate::upower::UPowerProxy;
 use argh::FromArgs;
 use dbus::{CpuMode, Server};
 use postage::prelude::*;
@@ -53,29 +49,38 @@ async fn cpu(connection: Connection, args: CpuArgs) -> anyhow::Result<()> {
 async fn daemon(connection: Connection) -> anyhow::Result<()> {
     let paths = SchedPaths::new()?;
 
-    let upower_proxy = UPowerProxy::new(&connection).await?;
+    let upower_proxy = upower_dbus::UPowerProxy::new(&connection).await?;
 
-    let (tx, mut rx) = postage::mpsc::channel(1);
+    let (mut tx, mut rx) = postage::mpsc::channel(1);
 
     let mut cpu_mode = CpuMode::Auto;
 
-    connection.object_server_mut().await.at(
-        "/com/system76/Scheduler",
-        Server {
-            cpu_mode,
-            cpu_profile: String::new(),
-            tx: tx.clone(),
-        },
-    )?;
+    connection
+        .object_server()
+        .at(
+            "/com/system76/Scheduler",
+            Server {
+                cpu_mode,
+                cpu_profile: String::new(),
+                tx: tx.clone(),
+            },
+        )
+        .await?;
 
     connection.request_name("com.system76.Scheduler").await?;
 
-    let _on_battery = upower_proxy
-        .connect_on_battery(move |on_battery| {
-            let mut tx = tx.clone();
-            let _ = tx.blocking_send(Event::OnBattery(on_battery));
-        })
-        .await;
+    let mut events = upower_proxy.receive_on_battery_changed().await;
+
+    let battery_service = async move {
+        eprintln!("starting battery watch service");
+
+        use futures::StreamExt;
+        while let Some(event) = events.next().await {
+            if let Ok(on_battery) = event.get().await {
+                let _ = tx.send(Event::OnBattery(on_battery)).await;
+            }
+        }
+    };
 
     let apply_config = |on_battery: bool| {
         cpu::tweak(
@@ -90,47 +95,52 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
         );
     };
 
-    apply_config(upower_proxy.on_battery().await);
+    apply_config(upower_proxy.on_battery().await.unwrap_or(false));
 
-    while let Some(event) = rx.recv().await {
-        match event {
-            Event::OnBattery(on_battery) => {
-                if let CpuMode::Auto = cpu_mode {
-                    apply_config(on_battery);
+    let event_handler = async {
+        eprintln!("starting event handler");
+        while let Some(event) = rx.recv().await {
+            match event {
+                Event::OnBattery(on_battery) => {
+                    if let CpuMode::Auto = cpu_mode {
+                        apply_config(on_battery);
+                    }
                 }
-            }
 
-            Event::SetCpuMode(new_cpu_mode) => {
-                cpu_mode = new_cpu_mode;
-                match cpu_mode {
-                    CpuMode::Auto => {
-                        eprintln!("applying auto config");
-                        apply_config(upower_proxy.on_battery().await);
+                Event::SetCpuMode(new_cpu_mode) => {
+                    cpu_mode = new_cpu_mode;
+                    match cpu_mode {
+                        CpuMode::Auto => {
+                            eprintln!("applying auto config");
+                            apply_config(upower_proxy.on_battery().await.unwrap_or(false));
+                        }
+
+                        CpuMode::Default => {
+                            eprintln!("applying default config");
+                            cpu::tweak(&paths, &Config::default_config());
+                        }
+
+                        CpuMode::Responsive => {
+                            eprintln!("applying responsive config");
+                            cpu::tweak(&paths, &Config::responsive_config());
+                        }
+
+                        _ => (),
                     }
-
-                    CpuMode::Default => {
-                        eprintln!("applying default config");
-                        cpu::tweak(&paths, &Config::default_config());
-                    }
-
-                    CpuMode::Responsive => {
-                        eprintln!("applying responsive config");
-                        cpu::tweak(&paths, &Config::responsive_config());
-                    }
-
-                    _ => (),
                 }
-            }
 
-            Event::SetCustomCpuMode(profile) => {
-                if let Some(config) = Config::custom_config(&profile) {
-                    cpu_mode = CpuMode::Custom;
-                    eprintln!("applying {} config", profile);
-                    cpu::tweak(&paths, &config);
+                Event::SetCustomCpuMode(profile) => {
+                    if let Some(config) = Config::custom_config(&profile) {
+                        cpu_mode = CpuMode::Custom;
+                        eprintln!("applying {} config", profile);
+                        cpu::tweak(&paths, &config);
+                    }
                 }
             }
         }
-    }
+    };
+
+    let _ = futures::join!(event_handler, battery_service);
 
     Ok(())
 }

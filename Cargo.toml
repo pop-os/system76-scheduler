@@ -4,13 +4,15 @@ version = "0.1.0"
 edition = "2018"
 
 [dependencies]
-anyhow = "1.0.45"
-argh = "0.1.6"
-futures = "0.3.17"
-num_cpus = "1.13.0"
+anyhow = "1.0.52"
+argh = "0.1.7"
+futures = "0.3.19"
+num_cpus = "1.13.1"
 postage = "0.4.1"
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0.133", features = ["derive"] }
+serde_repr = "0.1.7"
 thiserror = "1.0.30"
 toml = "0.5.8"
-zbus = "2.0.0-beta.7"
-zvariant = "2.0.0-beta.7"
+upower_dbus = "0.2.0"
+zbus = "2.0.0"
+zvariant = "3.0.0"
