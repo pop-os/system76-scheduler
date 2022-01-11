@@ -52,6 +52,7 @@ enum Event {
     SetAutoBackgroundPriority(u32),
     SetCpuMode,
     SetCustomCpuMode,
+    SetForegroundProcess(u32),
     OnBattery(bool),
 }
 
@@ -120,6 +121,8 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
     let event_handler = async {
         eprintln!("starting event handler");
 
+        let mut foreground_process = None;
+
         while let Some(event) = rx.recv().await {
             let interface_result = connection
                 .object_server()
@@ -138,12 +141,29 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
 
             match event {
                 Event::SetAutoBackgroundPriority(pid) => {
-                    unsafe {
-                        // Only change priority of a process which has an unset priority
-                        if libc::getpriority(libc::PRIO_PROCESS, pid) == 0 {
-                            crate::nice::set_priority(pid, 5);
+                    if let Some(current) = foreground_process.as_ref() {
+                        if *current == pid {
+                            continue;
                         }
                     }
+
+                    let current = unsafe { libc::getpriority(libc::PRIO_PROCESS, pid) };
+
+                    // Only change priority of a process which has an unset priority
+                    if current == 0 || current == -5 || current == 5 {
+                        crate::nice::set_priority(pid, 5);
+                    }
+                }
+
+                Event::SetForegroundProcess(pid) => {
+                    if let Some(pid) = foreground_process.take() {
+                        eprintln!("setting background process {} to priority 5", pid);
+                        crate::nice::set_priority(pid, 5);
+                    }
+
+                    eprintln!("setting foreground process {} to priority -5", pid);
+                    crate::nice::set_priority(pid, -5);
+                    foreground_process = Some(pid);
                 }
 
                 Event::OnBattery(on_battery) => {
