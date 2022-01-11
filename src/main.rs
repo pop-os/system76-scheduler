@@ -61,7 +61,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
             "/com/system76/Scheduler",
             Server {
                 cpu_mode,
-                cpu_profile: String::new(),
+                cpu_profile: String::from("auto"),
                 tx: tx.clone(),
             },
         )
