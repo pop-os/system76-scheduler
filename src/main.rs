@@ -17,8 +17,8 @@ use postage::prelude::*;
 use zbus::Connection;
 
 enum Event {
-    SetCpuMode(CpuMode),
-    SetCustomCpuMode(String),
+    SetCpuMode,
+    SetCustomCpuMode,
     OnBattery(bool),
 }
 
@@ -53,14 +53,12 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
 
     let (mut tx, mut rx) = postage::mpsc::channel(1);
 
-    let mut cpu_mode = CpuMode::Auto;
-
     connection
         .object_server()
         .at(
             "/com/system76/Scheduler",
             Server {
-                cpu_mode,
+                cpu_mode: CpuMode::Auto,
                 cpu_profile: String::from("auto"),
                 tx: tx.clone(),
             },
@@ -100,39 +98,50 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
     let event_handler = async {
         eprintln!("starting event handler");
         while let Some(event) = rx.recv().await {
+            let interface_result = connection
+                .object_server()
+                .interface::<_, Server>("/com/system76/Scheduler")
+                .await;
+
+            let iface_handle = match interface_result {
+                Ok(iface_handler) => iface_handler,
+                Err(why) => {
+                    eprintln!("DBus interface not reachable: {:#?}", why);
+                    break;
+                }
+            };
+
+            let interface = iface_handle.get().await;
+
             match event {
                 Event::OnBattery(on_battery) => {
-                    if let CpuMode::Auto = cpu_mode {
+                    if let CpuMode::Auto = interface.cpu_mode {
                         apply_config(on_battery);
                     }
                 }
 
-                Event::SetCpuMode(new_cpu_mode) => {
-                    cpu_mode = new_cpu_mode;
-                    match cpu_mode {
-                        CpuMode::Auto => {
-                            eprintln!("applying auto config");
-                            apply_config(upower_proxy.on_battery().await.unwrap_or(false));
-                        }
-
-                        CpuMode::Default => {
-                            eprintln!("applying default config");
-                            cpu::tweak(&paths, &Config::default_config());
-                        }
-
-                        CpuMode::Responsive => {
-                            eprintln!("applying responsive config");
-                            cpu::tweak(&paths, &Config::responsive_config());
-                        }
-
-                        _ => (),
+                Event::SetCpuMode => match interface.cpu_mode {
+                    CpuMode::Auto => {
+                        eprintln!("applying auto config");
+                        apply_config(upower_proxy.on_battery().await.unwrap_or(false));
                     }
-                }
 
-                Event::SetCustomCpuMode(profile) => {
-                    if let Some(config) = Config::custom_config(&profile) {
-                        cpu_mode = CpuMode::Custom;
-                        eprintln!("applying {} config", profile);
+                    CpuMode::Default => {
+                        eprintln!("applying default config");
+                        cpu::tweak(&paths, &Config::default_config());
+                    }
+
+                    CpuMode::Responsive => {
+                        eprintln!("applying responsive config");
+                        cpu::tweak(&paths, &Config::responsive_config());
+                    }
+
+                    _ => (),
+                },
+
+                Event::SetCustomCpuMode => {
+                    if let Some(config) = Config::custom_config(&interface.cpu_profile) {
+                        eprintln!("applying {} config", interface.cpu_profile);
                         cpu::tweak(&paths, &config);
                     }
                 }

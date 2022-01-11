@@ -66,10 +66,11 @@ impl Server {
     async fn set_cpu_mode(&mut self, cpu_mode: CpuMode) {
         self.cpu_mode = cpu_mode;
 
-        let _ = self.tx.send(Event::SetCpuMode(cpu_mode)).await;
+        let _ = self.tx.send(Event::SetCpuMode).await;
     }
 
     async fn set_cpu_profile(&mut self, profile: String) {
+        self.cpu_profile = profile.clone();
         match profile.as_str() {
             "auto" => self.set_cpu_mode(CpuMode::Auto).await,
             "default" => self.set_cpu_mode(CpuMode::Default).await,
@@ -77,9 +78,8 @@ impl Server {
             "" => (),
             _ => {
                 self.cpu_mode = CpuMode::Custom;
-                self.cpu_profile = profile.clone();
 
-                let _ = self.tx.send(Event::SetCustomCpuMode(profile)).await;
+                let _ = self.tx.send(Event::SetCustomCpuMode).await;
             }
         }
     }
