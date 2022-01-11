@@ -7,6 +7,7 @@ edition = "2018"
 anyhow = "1.0.52"
 argh = "0.1.7"
 futures = "0.3.19"
+libc = "0.2.112"
 num_cpus = "1.13.1"
 postage = "0.4.1"
 serde = { version = "1.0.133", features = ["derive"] }
@@ -16,3 +17,7 @@ toml = "0.5.8"
 upower_dbus = "0.2.0"
 zbus = "2.0.0"
 zvariant = "3.0.0"
+
+[dependencies.tokio]
+version = "1.15.0"
+features = ["fs", "macros", "rt", "time"]
