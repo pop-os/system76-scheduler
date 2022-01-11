@@ -100,8 +100,8 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
 
     connection.request_name("com.system76.Scheduler").await?;
 
-    let process_service = process_monitor(tx.clone());
-    let battery_service = battery_monitor(upower_proxy.receive_on_battery_changed().await, tx);
+    let battery_service =
+        battery_monitor(upower_proxy.receive_on_battery_changed().await, tx.clone());
 
     let apply_config = |on_battery: bool| {
         cpu::tweak(
@@ -156,13 +156,13 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
                 }
 
                 Event::SetForegroundProcess(pid) => {
-                    if let Some(pid) = foreground_process.take() {
-                        eprintln!("setting background process {} to priority 5", pid);
-                        crate::nice::set_priority(pid, 5);
+                    if let Some(prev) = foreground_process.take() {
+                        crate::nice::set_priority(prev, 5);
+                        crate::nice::set_priority(pid, -5);
+                    } else {
+                        tokio::spawn(process_monitor(tx.clone(), pid));
                     }
 
-                    eprintln!("setting foreground process {} to priority -5", pid);
-                    crate::nice::set_priority(pid, -5);
                     foreground_process = Some(pid);
                 }
 
@@ -201,7 +201,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
         }
     };
 
-    let _ = futures::join!(event_handler, battery_service, process_service);
+    let _ = futures::join!(event_handler, battery_service);
 
     Ok(())
 }
@@ -235,7 +235,9 @@ const LOW_PRIORITY: &[&str] = &[
     "sh",
 ];
 
-async fn process_monitor(mut tx: Sender<Event>) {
+async fn process_monitor(mut tx: Sender<Event>, foreground: u32) {
+    let mut initial = Some(foreground);
+
     loop {
         if let Ok(procfs) = Path::new("/proc").read_dir() {
             for proc_entry in procfs.filter_map(Result::ok) {
@@ -268,6 +270,10 @@ async fn process_monitor(mut tx: Sender<Event>) {
                     let _ = tx.send(Event::SetAutoBackgroundPriority(pid)).await;
                 }
             }
+        }
+
+        if let Some(pid) = initial.take() {
+            crate::nice::set_priority(pid, -5);
         }
 
         tokio::time::sleep(Duration::from_secs(60)).await;
