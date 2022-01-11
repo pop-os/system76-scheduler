@@ -49,6 +49,9 @@ pub trait Client {
     fn set_cpu_mode(&mut self, cpu_mode: CpuMode) -> zbus::fdo::Result<()>;
 
     fn set_cpu_profile(&mut self, profile: &str) -> zbus::fdo::Result<()>;
+
+    /// This process will have its process group prioritized over background processes
+    async fn set_foreground_process(&mut self, pid: u32) -> zbus::fdo::Result<()>;
 }
 
 #[dbus_interface(name = "com.system76.Scheduler")]
@@ -82,5 +85,10 @@ impl Server {
                 let _ = self.tx.send(Event::SetCustomCpuMode).await;
             }
         }
+    }
+
+    /// This process will have its process group prioritized over background processes
+    async fn set_foreground_process(&mut self, pid: u32) {
+        let _ = self.tx.send(Event::SetForegroundProcess(pid)).await;
     }
 }
