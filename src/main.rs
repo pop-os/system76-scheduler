@@ -10,7 +10,7 @@ mod dbus;
 mod nice;
 mod paths;
 
-use std::{path::Path, time::Duration};
+use std::{collections::BTreeMap, path::Path, time::Duration};
 
 use crate::config::Config;
 use crate::paths::SchedPaths;
@@ -48,12 +48,14 @@ struct CpuArgs {
 /// Launch the DBus service.
 struct DaemonArgs {}
 
+#[derive(Debug)]
 enum Event {
+    OnBattery(bool),
     SetAutoBackgroundPriority(u32),
     SetCpuMode,
     SetCustomCpuMode,
     SetForegroundProcess(u32),
-    OnBattery(bool),
+    UpdateProcessMap(BTreeMap<u32, Option<u32>>),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -84,7 +86,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
 
     let upower_proxy = UPowerProxy::new(&connection).await?;
 
-    let (tx, mut rx) = postage::mpsc::channel(1);
+    let (tx, mut rx) = postage::mpsc::channel(4);
 
     connection
         .object_server()
@@ -100,8 +102,10 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
 
     connection.request_name("com.system76.Scheduler").await?;
 
-    let battery_service =
-        battery_monitor(upower_proxy.receive_on_battery_changed().await, tx.clone());
+    tokio::spawn(battery_monitor(
+        upower_proxy.receive_on_battery_changed().await,
+        tx.clone(),
+    ));
 
     let apply_config = |on_battery: bool| {
         cpu::tweak(
@@ -118,96 +122,99 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
 
     apply_config(upower_proxy.on_battery().await.unwrap_or(false));
 
-    let event_handler = async {
-        eprintln!("starting event handler");
+    let mut process_monitoring_handle = None;
+    let mut foreground_processes: Option<Vec<u32>> = None;
+    let mut process_map = BTreeMap::new();
 
-        let mut foreground_process = None;
+    while let Some(event) = rx.recv().await {
+        let interface_result = connection
+            .object_server()
+            .interface::<_, Server>("/com/system76/Scheduler")
+            .await;
 
-        while let Some(event) = rx.recv().await {
-            let interface_result = connection
-                .object_server()
-                .interface::<_, Server>("/com/system76/Scheduler")
-                .await;
+        let iface_handle = match interface_result {
+            Ok(iface_handler) => iface_handler,
+            Err(why) => {
+                eprintln!("DBus interface not reachable: {:#?}", why);
+                break;
+            }
+        };
 
-            let iface_handle = match interface_result {
-                Ok(iface_handler) => iface_handler,
-                Err(why) => {
-                    eprintln!("DBus interface not reachable: {:#?}", why);
-                    break;
-                }
-            };
+        let interface = iface_handle.get().await;
 
-            let interface = iface_handle.get().await;
+        eprintln!("received {:?}", event);
 
-            match event {
-                Event::SetAutoBackgroundPriority(pid) => {
-                    if let Some(current) = foreground_process.as_ref() {
-                        if *current == pid {
-                            continue;
-                        }
-                    }
-
-                    let current = unsafe { libc::getpriority(libc::PRIO_PROCESS, pid) };
-
-                    // Only change priority of a process which has an unset priority
-                    if current == 0 || current == -5 || current == 5 {
-                        crate::nice::set_priority(pid, 5);
+        match event {
+            Event::SetAutoBackgroundPriority(pid) => {
+                if let Some(current) = foreground_processes.as_ref() {
+                    if current.contains(&pid) {
+                        continue;
                     }
                 }
 
-                Event::SetForegroundProcess(pid) => {
-                    if let Some(prev) = foreground_process.take() {
-                        crate::nice::set_priority(prev, 5);
-                        crate::nice::set_priority(pid, -5);
-                    } else {
-                        tokio::spawn(process_monitor(tx.clone(), pid));
-                    }
+                let current = unsafe { libc::getpriority(libc::PRIO_PROCESS, pid) };
 
-                    foreground_process = Some(pid);
+                // Only change priority of a process which has an unset priority
+                if current == 0 || current == -5 || current == 5 {
+                    crate::nice::set_priority(pid, 5);
+                }
+            }
+
+            Event::UpdateProcessMap(map) => {
+                process_map = map;
+            }
+
+            Event::SetForegroundProcess(pid) => {
+                if let Some(prev) = foreground_processes.take() {
+                    for process in prev {
+                        crate::nice::set_priority(process, 5);
+                    }
+                } else if process_monitoring_handle.is_none() {
+                    process_monitoring_handle =
+                        Some(tokio::spawn(process_monitor(tx.clone(), pid)));
+                    continue;
                 }
 
-                Event::OnBattery(on_battery) => {
-                    if let CpuMode::Auto = interface.cpu_mode {
-                        apply_config(on_battery);
-                    }
+                foreground_processes = Some(set_foreground_processes(&process_map, pid).await);
+            }
+
+            Event::OnBattery(on_battery) => {
+                if let CpuMode::Auto = interface.cpu_mode {
+                    apply_config(on_battery);
+                }
+            }
+
+            Event::SetCpuMode => match interface.cpu_mode {
+                CpuMode::Auto => {
+                    eprintln!("applying auto config");
+                    apply_config(upower_proxy.on_battery().await.unwrap_or(false));
                 }
 
-                Event::SetCpuMode => match interface.cpu_mode {
-                    CpuMode::Auto => {
-                        eprintln!("applying auto config");
-                        apply_config(upower_proxy.on_battery().await.unwrap_or(false));
-                    }
+                CpuMode::Default => {
+                    eprintln!("applying default config");
+                    cpu::tweak(&paths, &Config::default_config());
+                }
 
-                    CpuMode::Default => {
-                        eprintln!("applying default config");
-                        cpu::tweak(&paths, &Config::default_config());
-                    }
+                CpuMode::Responsive => {
+                    eprintln!("applying responsive config");
+                    cpu::tweak(&paths, &Config::responsive_config());
+                }
 
-                    CpuMode::Responsive => {
-                        eprintln!("applying responsive config");
-                        cpu::tweak(&paths, &Config::responsive_config());
-                    }
+                _ => (),
+            },
 
-                    _ => (),
-                },
-
-                Event::SetCustomCpuMode => {
-                    if let Some(config) = Config::custom_config(&interface.cpu_profile) {
-                        eprintln!("applying {} config", interface.cpu_profile);
-                        cpu::tweak(&paths, &config);
-                    }
+            Event::SetCustomCpuMode => {
+                if let Some(config) = Config::custom_config(&interface.cpu_profile) {
+                    eprintln!("applying {} config", interface.cpu_profile);
+                    cpu::tweak(&paths, &config);
                 }
             }
         }
-    };
-
-    let _ = futures::join!(event_handler, battery_service);
-
+    }
     Ok(())
 }
 
 async fn battery_monitor(mut events: PropertyStream<'_, bool>, mut tx: Sender<Event>) {
-    eprintln!("starting battery watch service");
     use futures::StreamExt;
     while let Some(event) = events.next().await {
         if let Ok(on_battery) = event.get().await {
@@ -240,6 +247,8 @@ async fn process_monitor(mut tx: Sender<Event>, foreground: u32) {
 
     loop {
         if let Ok(procfs) = Path::new("/proc").read_dir() {
+            let mut parents = BTreeMap::<u32, Option<u32>>::new();
+
             for proc_entry in procfs.filter_map(Result::ok) {
                 let proc_path = proc_entry.path();
 
@@ -252,6 +261,22 @@ async fn process_monitor(mut tx: Sender<Event>, foreground: u32) {
                 } else {
                     continue;
                 };
+
+                let mut parent = None;
+
+                if let Ok(status) = tokio::fs::read_to_string(proc_path.join("status")).await {
+                    for line in status.lines() {
+                        if let Some(ppid) = line.strip_prefix("PPid:") {
+                            if let Ok(ppid) = ppid.trim().parse::<u32>() {
+                                parent = Some(ppid);
+                            }
+
+                            break;
+                        }
+                    }
+                }
+
+                parents.insert(pid, parent);
 
                 // Prevents kernel processes from having their priorities changed.
                 if let Ok(exe) = proc_path.join("exe").canonicalize() {
@@ -268,14 +293,41 @@ async fn process_monitor(mut tx: Sender<Event>, foreground: u32) {
                     }
 
                     let _ = tx.send(Event::SetAutoBackgroundPriority(pid)).await;
+                    tokio::task::yield_now().await;
                 }
             }
+
+            let _ = tx.send(Event::UpdateProcessMap(parents)).await;
+            tokio::task::yield_now().await;
         }
 
         if let Some(pid) = initial.take() {
-            crate::nice::set_priority(pid, -5);
+            let _ = tx.send(Event::SetForegroundProcess(pid)).await;
+            tokio::task::yield_now().await;
         }
 
         tokio::time::sleep(Duration::from_secs(60)).await;
     }
+}
+
+async fn set_foreground_processes(map: &BTreeMap<u32, Option<u32>>, pid: u32) -> Vec<u32> {
+    crate::nice::set_priority(pid, -5);
+    let mut foreground_processes = vec![pid];
+
+    'outer: loop {
+        for (pid, parent) in map.iter() {
+            if let Some(parent) = parent {
+                if foreground_processes.contains(&parent) && !foreground_processes.contains(pid) {
+                    crate::nice::set_priority(*pid, -5);
+                    foreground_processes.push(*pid);
+                    tokio::task::yield_now().await;
+                    continue 'outer;
+                }
+            }
+        }
+
+        break;
+    }
+
+    foreground_processes
 }
