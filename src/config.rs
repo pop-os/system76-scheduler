@@ -2,89 +2,159 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use serde::Deserialize;
-use std::{fs, path::Path};
+use std::collections::{BTreeMap, HashSet};
+use std::fs;
+use std::path::Path;
 
 const DISTRIBUTION_PATH: &str = "/usr/lib/";
 const SYSTEM_CONF_PATH: &str = "/etc/";
 
-const PROFILES_PATH: &str = "system76-scheduler/cpu/";
+const CONFIG_PATH: &str = "system76-scheduler/config.ron";
 
-const DEFAULT_CONFIG: Config = Config {
-    latency: 6,
-    minimum_granularity: 0.75,
-    wakeup_granularity: 1.0,
-    migration_cost: 0.5,
-    bandwidth_size: 5,
-};
-
-const RESPONSIVE_CONFIG: Config = Config {
-    latency: 4,
-    minimum_granularity: 0.4,
-    wakeup_granularity: 0.5,
-    migration_cost: 0.25,
-    bandwidth_size: 3,
-};
-
-#[derive(Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct Config {
-    /// Preemption latency for CPU-bound tasks in ns
-    pub latency: u64,
-    /// Minimum preemption granularity for CPU-bound tasks in ms
-    pub minimum_granularity: f64,
-    /// Wakeup preemption granularity for CPU-bound tasks in ms
-    pub wakeup_granularity: f64,
-    /// Cost of CPU task migration in ms
-    pub migration_cost: f64,
-    /// Amount of time to allocate from global to local pool in us
-    pub bandwidth_size: u64,
+    pub background: Option<i8>,
+    pub foreground: Option<i8>,
 }
 
 impl Config {
-    pub fn config_path(config: &str) -> Option<String> {
-        let mut path = [SYSTEM_CONF_PATH, PROFILES_PATH, config, ".toml"].concat();
+    pub fn read() -> Config {
+        let mut path = [SYSTEM_CONF_PATH, CONFIG_PATH].concat();
 
-        if Path::new(&path).exists() {
-            return Some(path);
+        if let Ok(config) = std::fs::read_to_string(path) {
+            if let Ok(config) = ron::from_str(&config) {
+                return config;
+            }
         }
 
-        path = [DISTRIBUTION_PATH, PROFILES_PATH, config, ".toml"].concat();
+        path = [DISTRIBUTION_PATH, CONFIG_PATH].concat();
 
-        if Path::new(&path).exists() {
-            return Some(path);
+        if let Ok(config) = std::fs::read_to_string(path) {
+            if let Ok(config) = ron::from_str(&config) {
+                return config;
+            }
         }
 
-        None
+        Config {
+            background: Some(5),
+            foreground: Some(-5)
+        }
     }
 
-    pub fn custom_config(profile: &str) -> Option<Self> {
-        if let Some(path) = Self::config_path(profile) {
-            if let Ok(file) = fs::read_to_string(&path) {
-                if let Ok(conf) = toml::from_str(&file) {
-                    return Some(conf);
+    pub fn automatic_assignments() -> BTreeMap<String, i8> {
+        let mut assignments = BTreeMap::<String, i8>::new();
+
+        let directories = [
+            Path::new("/usr/lib/system76-scheduler/assignments/"),
+            Path::new("/etc/system76-scheduler/assignments/")
+        ];
+
+        for directory in directories {
+            if let Ok(dir) = directory.read_dir() {
+                for entry in dir.filter_map(Result::ok) {
+                    if let Ok(string) = fs::read_to_string(entry.path()) {
+                        if let Ok(buffer) = ron::from_str::<BTreeMap<i8, HashSet<String>>>(&string) {
+                            for (priority, commands) in buffer {
+                                for command in commands {
+                                    assignments.insert(command, priority);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        None
+        dbg!(assignments)
+    }
+}
+
+
+pub mod cpu {
+    use serde::Deserialize;
+    use std::{fs, path::Path};
+
+    use super::*;
+
+    const PROFILES_PATH: &str = "system76-scheduler/cpu/";
+
+    const DEFAULT_CONFIG: Config = Config {
+        latency: 6,
+        minimum_granularity: 0.75,
+        wakeup_granularity: 1.0,
+        migration_cost: 0.5,
+        bandwidth_size: 5,
+    };
+
+    const RESPONSIVE_CONFIG: Config = Config {
+        latency: 4,
+        minimum_granularity: 0.4,
+        wakeup_granularity: 0.5,
+        migration_cost: 0.25,
+        bandwidth_size: 3,
+    };
+
+    #[derive(Deserialize)]
+    pub struct Config {
+        /// Preemption latency for CPU-bound tasks in ns
+        pub latency: u64,
+        /// Minimum preemption granularity for CPU-bound tasks in ms
+        pub minimum_granularity: f64,
+        /// Wakeup preemption granularity for CPU-bound tasks in ms
+        pub wakeup_granularity: f64,
+        /// Cost of CPU task migration in ms
+        pub migration_cost: f64,
+        /// Amount of time to allocate from global to local pool in us
+        pub bandwidth_size: u64,
     }
 
-    pub fn responsive_config() -> Self {
-        let mut conf = RESPONSIVE_CONFIG;
+    impl Config {
+        pub fn config_path(config: &str) -> Option<String> {
+            let mut path = [SYSTEM_CONF_PATH, PROFILES_PATH, config, ".ron"].concat();
 
-        if let Some(config) = Self::custom_config("responsive") {
-            conf = config;
+            if Path::new(&path).exists() {
+                return Some(path);
+            }
+
+            path = [DISTRIBUTION_PATH, PROFILES_PATH, config, ".ron"].concat();
+
+            if Path::new(&path).exists() {
+                return Some(path);
+            }
+
+            None
         }
 
-        conf
-    }
+        pub fn custom_config(profile: &str) -> Option<Self> {
+            if let Some(path) = Self::config_path(profile) {
+                if let Ok(file) = fs::read_to_string(&path) {
+                    if let Ok(conf) = ron::from_str(&file) {
+                        return Some(conf);
+                    }
+                }
+            }
 
-    pub fn default_config() -> Self {
-        let mut conf = DEFAULT_CONFIG;
-
-        if let Some(config) = Self::custom_config("default") {
-            conf = config;
+            None
         }
 
-        conf
+        pub fn responsive_config() -> Self {
+            let mut conf = RESPONSIVE_CONFIG;
+
+            if let Some(config) = Self::custom_config("responsive") {
+                conf = config;
+            }
+
+            conf
+        }
+
+        pub fn default_config() -> Self {
+            let mut conf = DEFAULT_CONFIG;
+
+            if let Some(config) = Self::custom_config("default") {
+                conf = config;
+            }
+
+            conf
+        }
     }
 }
