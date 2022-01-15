@@ -1,4 +1,4 @@
-// Copyright 2021 System76 <info@system76.com>
+// Copyright 2021-2022 System76 <info@system76.com>
 // SPDX-License-Identifier: MPL-2.0
 
 use serde::Deserialize;
@@ -37,7 +37,7 @@ impl Config {
 
         Config {
             background: Some(5),
-            foreground: Some(-5)
+            foreground: Some(-5),
         }
     }
 
@@ -45,15 +45,16 @@ impl Config {
         let mut assignments = BTreeMap::<String, i8>::new();
 
         let directories = [
-            Path::new("/usr/lib/system76-scheduler/assignments/"),
-            Path::new("/etc/system76-scheduler/assignments/")
+            Path::new("/usr/share/system76-scheduler/assignments/"),
+            Path::new("/etc/system76-scheduler/assignments/"),
         ];
 
         for directory in directories {
             if let Ok(dir) = directory.read_dir() {
                 for entry in dir.filter_map(Result::ok) {
                     if let Ok(string) = fs::read_to_string(entry.path()) {
-                        if let Ok(buffer) = ron::from_str::<BTreeMap<i8, HashSet<String>>>(&string) {
+                        if let Ok(buffer) = ron::from_str::<BTreeMap<i8, HashSet<String>>>(&string)
+                        {
                             for (priority, commands) in buffer {
                                 for command in commands {
                                     assignments.insert(command, priority);
@@ -68,7 +69,6 @@ impl Config {
         dbg!(assignments)
     }
 }
-
 
 pub mod cpu {
     use serde::Deserialize;

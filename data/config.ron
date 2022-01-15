@@ -1,0 +1,7 @@
+(
+// The priority to assign background tasks.
+background: Some(5),
+
+// The priority to assign foreground tasks.
+foreground: Some(-5),
+)

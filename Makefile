@@ -44,9 +44,13 @@ ifeq ($(VENDOR),1)
 endif
 
 install:
+	mkdir -p $(DESTDIR)$(sysconfdir)/system76-scheduler/assignments
+	install -Dm0644 "data/config.ron" "$(DESTDIR)$(sysconfdir)/system76-scheduler/config.ron"
+	install -Dm0644 "data/auto.ron" "$(DESTDIR)$(sysconfdir)/system76-scheduler/assignments/default.ron"
 	install -Dm04755 "target/$(TARGET)/$(BINARY)" "$(TARGET_BIN)"
 	install -Dm0644 "data/$(ID).service" "$(DESTDIR)$(libdir)/systemd/system/$(ID).service"
 	install -Dm0644 "data/$(ID).conf" "$(DESTDIR)$(sysconfdir)/dbus-1/system.d/$(ID).conf"
+
 
 uninstall:
 	rm "$(TARGET_BIN)"

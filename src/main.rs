@@ -1,4 +1,4 @@
-// Copyright 2021 System76 <info@system76.com>
+// Copyright 2021-2022 System76 <info@system76.com>
 // SPDX-License-Identifier: MPL-2.0
 
 #[macro_use]
@@ -12,7 +12,7 @@ mod paths;
 
 use std::{collections::BTreeMap, path::Path, time::Duration};
 
-use crate::config::Config;
+use crate::config::{cpu::Config as CpuConfig, Config};
 use crate::paths::SchedPaths;
 use argh::FromArgs;
 use dbus::{CpuMode, Server};
@@ -51,7 +51,7 @@ struct DaemonArgs {}
 #[derive(Debug)]
 enum Event {
     OnBattery(bool),
-    SetAutoBackgroundPriority(u32),
+    SetAutoBackgroundPriority(u32, String),
     SetCpuMode,
     SetCustomCpuMode,
     SetForegroundProcess(u32),
@@ -112,10 +112,10 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
             &paths,
             &if on_battery {
                 eprintln!("auto config applying default config");
-                Config::default_config()
+                CpuConfig::default_config()
             } else {
                 eprintln!("auto config applying responsive config");
-                Config::responsive_config()
+                CpuConfig::responsive_config()
             },
         );
     };
@@ -125,6 +125,9 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
     let mut process_monitoring_handle = None;
     let mut foreground_processes: Option<Vec<u32>> = None;
     let mut process_map = BTreeMap::new();
+
+    let config = Config::read();
+    let automatic_assignments = Config::automatic_assignments();
 
     while let Some(event) = rx.recv().await {
         let interface_result = connection
@@ -142,10 +145,8 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
 
         let interface = iface_handle.get().await;
 
-        eprintln!("received {:?}", event);
-
         match event {
-            Event::SetAutoBackgroundPriority(pid) => {
+            Event::SetAutoBackgroundPriority(pid, exe) => {
                 if let Some(current) = foreground_processes.as_ref() {
                     if current.contains(&pid) {
                         continue;
@@ -154,9 +155,19 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
 
                 let current = unsafe { libc::getpriority(libc::PRIO_PROCESS, pid) };
 
-                // Only change priority of a process which has an unset priority
-                if current == 0 || current == -5 || current == 5 {
-                    crate::nice::set_priority(pid, 5);
+                let priority = automatic_assignments
+                    .get(&exe)
+                    .cloned()
+                    .or_else(|| config.background.clone());
+
+                if let Some(mut priority) = priority {
+                    if priority < -9 {
+                        priority = -9;
+                    }
+
+                    if current >= -9 && current <= 9 {
+                        crate::nice::set_priority(pid, priority as i32)
+                    }
                 }
             }
 
@@ -165,17 +176,46 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
             }
 
             Event::SetForegroundProcess(pid) => {
-                if let Some(prev) = foreground_processes.take() {
-                    for process in prev {
-                        crate::nice::set_priority(process, 5);
+                if let Some(foreground_priority) = config.foreground {
+                    if let Some(prev) = foreground_processes.take() {
+                        let priority = config.background.unwrap_or(0) as i32;
+                        for process in prev {
+                            crate::nice::set_priority(process, priority);
+                        }
+                    } else if process_monitoring_handle.is_none() {
+                        process_monitoring_handle =
+                            Some(tokio::spawn(process_monitor(tx.clone(), pid)));
+                        continue;
                     }
-                } else if process_monitoring_handle.is_none() {
-                    process_monitoring_handle =
-                        Some(tokio::spawn(process_monitor(tx.clone(), pid)));
-                    continue;
-                }
 
-                foreground_processes = Some(set_foreground_processes(&process_map, pid).await);
+                    crate::nice::set_priority(pid, foreground_priority as i32);
+                    let mut processes = vec![pid];
+
+                    'outer: loop {
+                        for (pid, parent) in process_map.iter() {
+                            if let Some(parent) = parent {
+                                if processes.contains(&parent) && !processes.contains(pid) {
+                                    if let Some(exe) = exe_of_pid(*pid) {
+                                        let priority = automatic_assignments
+                                            .get(&exe)
+                                            .cloned()
+                                            .unwrap_or(foreground_priority)
+                                            as i32;
+
+                                        crate::nice::set_priority(*pid, priority);
+                                    }
+
+                                    processes.push(*pid);
+                                    continue 'outer;
+                                }
+                            }
+                        }
+
+                        break;
+                    }
+
+                    foreground_processes = Some(processes);
+                }
             }
 
             Event::OnBattery(on_battery) => {
@@ -192,19 +232,19 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
 
                 CpuMode::Default => {
                     eprintln!("applying default config");
-                    cpu::tweak(&paths, &Config::default_config());
+                    cpu::tweak(&paths, &CpuConfig::default_config());
                 }
 
                 CpuMode::Responsive => {
                     eprintln!("applying responsive config");
-                    cpu::tweak(&paths, &Config::responsive_config());
+                    cpu::tweak(&paths, &CpuConfig::responsive_config());
                 }
 
                 _ => (),
             },
 
             Event::SetCustomCpuMode => {
-                if let Some(config) = Config::custom_config(&interface.cpu_profile) {
+                if let Some(config) = CpuConfig::custom_config(&interface.cpu_profile) {
                     eprintln!("applying {} config", interface.cpu_profile);
                     cpu::tweak(&paths, &config);
                 }
@@ -222,25 +262,6 @@ async fn battery_monitor(mut events: PropertyStream<'_, bool>, mut tx: Sender<Ev
         }
     }
 }
-
-// Important desktop processes.
-const HIGH_PRIORITY: &[&str] = &["gnome-shell", "kwin", "Xorg"];
-
-// Typically common compiler processes
-const LOW_PRIORITY: &[&str] = &[
-    "bash",
-    "c++",
-    "cargo",
-    "clang",
-    "cpp",
-    "g++",
-    "gcc",
-    "lld",
-    "make",
-    "rust-analyzer",
-    "rustc",
-    "sh",
-];
 
 async fn process_monitor(mut tx: Sender<Event>, foreground: u32) {
     let mut initial = Some(foreground);
@@ -280,19 +301,10 @@ async fn process_monitor(mut tx: Sender<Event>, foreground: u32) {
 
                 // Prevents kernel processes from having their priorities changed.
                 if let Ok(exe) = proc_path.join("exe").canonicalize() {
-                    if let Some(exe) = exe.file_name().and_then(|x| x.to_str()) {
-                        if HIGH_PRIORITY.contains(&exe) {
-                            // Automatically raise priority for processes that are important.
-                            crate::nice::set_priority(pid, -5);
-                            continue;
-                        } else if LOW_PRIORITY.contains(&exe) {
-                            // Automatically lower priority for known background processes.
-                            crate::nice::set_priority(pid, 15);
-                            continue;
-                        }
+                    if let Some(exe) = exe.file_name().and_then(|x| x.to_str()).map(String::from) {
+                        let _ = tx.send(Event::SetAutoBackgroundPriority(pid, exe)).await;
                     }
 
-                    let _ = tx.send(Event::SetAutoBackgroundPriority(pid)).await;
                     tokio::task::yield_now().await;
                 }
             }
@@ -310,24 +322,12 @@ async fn process_monitor(mut tx: Sender<Event>, foreground: u32) {
     }
 }
 
-async fn set_foreground_processes(map: &BTreeMap<u32, Option<u32>>, pid: u32) -> Vec<u32> {
-    crate::nice::set_priority(pid, -5);
-    let mut foreground_processes = vec![pid];
-
-    'outer: loop {
-        for (pid, parent) in map.iter() {
-            if let Some(parent) = parent {
-                if foreground_processes.contains(&parent) && !foreground_processes.contains(pid) {
-                    crate::nice::set_priority(*pid, -5);
-                    foreground_processes.push(*pid);
-                    tokio::task::yield_now().await;
-                    continue 'outer;
-                }
-            }
+fn exe_of_pid(pid: u32) -> Option<String> {
+    if let Ok(exe) = Path::new(&format!("/proc/{}/exe", pid)).canonicalize() {
+        if let Some(exe) = exe.file_name().and_then(|x| x.to_str()).map(String::from) {
+            return Some(exe);
         }
-
-        break;
     }
 
-    foreground_processes
+    None
 }
