@@ -1,0 +1,19 @@
+{
+// High priority
+-5: [
+    "gnome-shell",
+    "kwin",
+    "Xorg"
+],
+// Absolute lowest priority
+19: [
+    "c++",
+    "cargo",
+    "clang",
+    "cpp",
+    "g++",
+    "gcc",
+    "lld",
+    "make",
+    "rustc",
+}
