@@ -16,8 +16,7 @@ use crate::config::{cpu::Config as CpuConfig, Config};
 use crate::paths::SchedPaths;
 use argh::FromArgs;
 use dbus::{CpuMode, Server};
-use postage::mpsc::Sender;
-use postage::prelude::*;
+use tokio::sync::mpsc::Sender;
 use upower_dbus::UPowerProxy;
 use zbus::{Connection, PropertyStream};
 
@@ -74,7 +73,7 @@ async fn cpu(connection: Connection, args: CpuArgs) -> anyhow::Result<()> {
     let mut connection = dbus::ClientProxy::new(&connection).await?;
 
     match args.profile.as_ref() {
-        Some(profile) => connection.set_cpu_profile(&profile).await?,
+        Some(profile) => connection.set_cpu_profile(profile).await?,
         None => println!("{}", connection.cpu_profile().await?),
     }
 
@@ -86,7 +85,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
 
     let upower_proxy = UPowerProxy::new(&connection).await?;
 
-    let (tx, mut rx) = postage::mpsc::channel(4);
+    let (tx, mut rx) = tokio::sync::mpsc::channel(4);
 
     connection
         .object_server()
@@ -158,7 +157,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
                 let priority = automatic_assignments
                     .get(&exe)
                     .cloned()
-                    .or_else(|| config.background.clone());
+                    .or(config.background);
 
                 if let Some(mut priority) = priority {
                     if priority < -9 {
@@ -176,6 +175,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
             }
 
             Event::SetForegroundProcess(pid) => {
+                eprintln!("SetForegroundProcess({pid})");
                 if let Some(foreground_priority) = config.foreground {
                     if let Some(prev) = foreground_processes.take() {
                         let priority = config.background.unwrap_or(0) as i32;
@@ -194,7 +194,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
                     'outer: loop {
                         for (pid, parent) in process_map.iter() {
                             if let Some(parent) = parent {
-                                if processes.contains(&parent) && !processes.contains(pid) {
+                                if processes.contains(parent) && !processes.contains(pid) {
                                     if let Some(exe) = exe_of_pid(*pid) {
                                         let priority = automatic_assignments
                                             .get(&exe)
@@ -254,7 +254,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn battery_monitor(mut events: PropertyStream<'_, bool>, mut tx: Sender<Event>) {
+async fn battery_monitor(mut events: PropertyStream<'_, bool>, tx: Sender<Event>) {
     use futures::StreamExt;
     while let Some(event) = events.next().await {
         if let Ok(on_battery) = event.get().await {
@@ -263,7 +263,7 @@ async fn battery_monitor(mut events: PropertyStream<'_, bool>, mut tx: Sender<Ev
     }
 }
 
-async fn process_monitor(mut tx: Sender<Event>, foreground: u32) {
+async fn process_monitor(tx: Sender<Event>, foreground: u32) {
     let mut initial = Some(foreground);
 
     loop {

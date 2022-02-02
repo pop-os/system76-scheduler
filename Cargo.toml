@@ -12,7 +12,6 @@ argh = "0.1.7"
 futures = "0.3.19"
 libc = "0.2.112"
 num_cpus = "1.13.1"
-postage = "0.4.1"
 serde = { version = "1.0.133", features = ["derive"] }
 serde_repr = "0.1.7"
 thiserror = "1.0.30"
@@ -23,4 +22,4 @@ ron = "0.7.0"
 
 [dependencies.tokio]
 version = "1.15.0"
-features = ["fs", "macros", "rt", "time"]
+features = ["fs", "macros", "rt", "sync", "time"]
