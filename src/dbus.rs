@@ -2,9 +2,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use crate::Event;
-use postage::mpsc::Sender;
-use postage::prelude::*;
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use tokio::sync::mpsc::Sender;
 use zvariant::{OwnedValue, Type, Value};
 
 #[derive(
