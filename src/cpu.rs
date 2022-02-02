@@ -12,7 +12,6 @@ pub fn tweak(paths: &SchedPaths, conf: &Config) {
     write_value(paths.latency, modifier * conf.latency);
     write_value(paths.min_gran, modifier as f64 * conf.minimum_granularity);
     write_value(paths.wakeup_gran, modifier as f64 * conf.wakeup_granularity);
-    write_value(paths.migration_cost, modifier as f64 * conf.migration_cost);
     write_value(BANDWIDTH_SIZE_PATH, conf.bandwidth_size * 1000);
 }
 

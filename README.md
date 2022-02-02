@@ -47,7 +47,6 @@ The default settings for CFS by the Linux kernel. Achieves a high level of throu
 latency: 6ns
 minimum_granularity: 0.75ms
 wakeup_granularity: 1.0ms
-cpu_migration_cost: 0.5ms
 bandwidth_size: 5us
 ```
 
@@ -59,7 +58,6 @@ Slightly reduces time given to CPU-bound tasks to give more time to other proces
 latency: 4ns
 minimum_granularity: 0.4ms
 wakeup_granularity: 0.5ms
-cpu_migration_cost: 0.25ms
 bandwidth_size: 3us
 ```
 
