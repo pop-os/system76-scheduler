@@ -80,14 +80,14 @@ pub mod cpu {
 
     const DEFAULT_CONFIG: Config = Config {
         latency: 6,
-        minimum_granularity: 0.75,
+        nr_latency: 8,
         wakeup_granularity: 1.0,
         bandwidth_size: 5,
     };
 
     const RESPONSIVE_CONFIG: Config = Config {
         latency: 4,
-        minimum_granularity: 0.4,
+        nr_latency: 10,
         wakeup_granularity: 0.5,
         bandwidth_size: 3,
     };
@@ -96,8 +96,8 @@ pub mod cpu {
     pub struct Config {
         /// Preemption latency for CPU-bound tasks in ns
         pub latency: u64,
-        /// Minimum preemption granularity for CPU-bound tasks in ms
-        pub minimum_granularity: f64,
+        /// Used to calculate the minimum preemption granularity
+        pub nr_latency: u64,
         /// Wakeup preemption granularity for CPU-bound tasks in ms
         pub wakeup_granularity: f64,
         /// Amount of time to allocate from global to local pool in us
