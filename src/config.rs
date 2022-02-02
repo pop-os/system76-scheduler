@@ -82,7 +82,6 @@ pub mod cpu {
         latency: 6,
         minimum_granularity: 0.75,
         wakeup_granularity: 1.0,
-        migration_cost: 0.5,
         bandwidth_size: 5,
     };
 
@@ -90,7 +89,6 @@ pub mod cpu {
         latency: 4,
         minimum_granularity: 0.4,
         wakeup_granularity: 0.5,
-        migration_cost: 0.25,
         bandwidth_size: 3,
     };
 
@@ -102,8 +100,6 @@ pub mod cpu {
         pub minimum_granularity: f64,
         /// Wakeup preemption granularity for CPU-bound tasks in ms
         pub wakeup_granularity: f64,
-        /// Cost of CPU task migration in ms
-        pub migration_cost: f64,
         /// Amount of time to allocate from global to local pool in us
         pub bandwidth_size: u64,
     }
