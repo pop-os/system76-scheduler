@@ -1,3 +1,9 @@
+system76-scheduler (1.0.0) focal; urgency=medium
+
+  * Stable release
+
+ -- Michael Aaron Murphy <mmstick@pm.me>  Wed, 02 Feb 2022 23:43:59 +0100
+
 system76-scheduler (0.1.0) focal; urgency=medium
 
   * Initial release.
