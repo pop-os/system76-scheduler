@@ -1,11 +1,41 @@
 # System76 Scheduler
 
-System service which automatically configures Linux's CPU scheduler for increased desktop responsiveness when on AC power, and reduces to default latencies on battery. The DBus interface provides methods for manually overriding the automatic scheduler to specify a default or responsive profile.
+Scheduling service which optimizes Linux's CPU scheduler and automatically assigns process priorities for improved desktop responsiveness. Low latency CPU scheduling will be activated automatically when on AC, and the default scheduling latencies set on battery. Processes are regularly sweeped and assigned process priorities based on configuration files. When combined with [pop-shell](https://github.com/pop-os/shell/), foreground processes and their sub-processes will be given higher process priority.
+
+These changes result in a noticeable improvement in the experienced smoothness and performance of applications and games. The improved responsiveness of applications is most noticeable on older systems with budget hardware, whereas games will benefit from higher framerates and reduced jitter. This is because background applications and services will be given a smaller portion of leftover CPU budget after the active process has had the most time on the CPU.
 
 ## DBus
 
 - Interface: `com.system76.Scheduler`
 - Path: `/com/system76/Scheduler`
+
+The `SetForeground(u32)` method can be called to change the active foreground process.
+
+## Process Priority Config
+
+RON configuration files at `/etc/system76-scheduler/assignments/` and `/usr/share/system76-scheduler/assignments/` define default priorities for processes scanned. The configuration file uses Rusty Object Notation syntax, as a `Map<i8, Vec<String>>`. The `i8` keys define the CPU priority to assign. The lower the value, the greater the priority. Values lower than `-10` will be clamped to `-10`.
+
+```ron
+{
+// High priority
+-5: [
+    "gnome-shell",
+    "kwin",
+    "Xorg"
+],
+// Absolute lowest priority
+19: [
+    "c++",
+    "cargo",
+    "clang",
+    "cpp",
+    "g++",
+    "gcc",
+    "lld",
+    "make",
+    "rustc",
+]}
+```
 
 ## CPU Scheduler Latency Configurations
 
