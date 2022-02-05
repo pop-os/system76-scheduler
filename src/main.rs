@@ -175,7 +175,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
             }
 
             Event::SetForegroundProcess(pid) => {
-                eprintln!("SetForegroundProcess({pid})");
+                eprintln!("SetForegroundProcess({})", pid);
                 if let Some(foreground_priority) = config.foreground {
                     if let Some(prev) = foreground_processes.take() {
                         let priority = config.background.unwrap_or(0) as i32;
