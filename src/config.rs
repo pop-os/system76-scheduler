@@ -66,7 +66,7 @@ impl Config {
             }
         }
 
-        dbg!(assignments)
+        assignments
     }
 }
 
