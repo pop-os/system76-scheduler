@@ -3,7 +3,9 @@
 
 use crate::config::cpu::Config;
 use crate::paths::*;
-use std::fs;
+use std::fmt::Display;
+use std::io::Write;
+use std::{fs, io};
 
 /// Apply a configuration to CPU scheduler latencies.
 pub fn tweak(paths: &SchedPaths, conf: &Config) {
@@ -17,9 +19,16 @@ pub fn tweak(paths: &SchedPaths, conf: &Config) {
     write_value(BANDWIDTH_SIZE_PATH, conf.bandwidth_size * 1000);
 }
 
-/// Write a value that implements `ToString` to a file
-fn write_value<V: ToString>(path: &str, value: V) {
-    if let Err(why) = fs::write(path, value.to_string().as_bytes()) {
+/// Write a value that implements `Display` to a file
+fn write_value<V: Display>(path: &str, value: V) {
+    let write_to_file = |path, value| -> io::Result<()> {
+        let mut file = fs::File::create(path)?;
+        write!(file, "{}", value)?;
+
+        Ok(())
+    };
+
+    if let Err(why) = write_to_file(path, value) {
         eprintln!("failed to set value in {}: {}", path, why);
     }
 }
