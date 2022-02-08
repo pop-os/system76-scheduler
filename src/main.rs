@@ -110,10 +110,14 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
 
     connection.request_name("com.system76.Scheduler").await?;
 
+    // Spawns an async task that watches for battery status notifications.
     tokio::spawn(battery_monitor(
         upower_proxy.receive_on_battery_changed().await,
         tx.clone(),
     ));
+
+    // Spawns a process monitor that updates process map info.
+    tokio::spawn(process_monitor(tx.clone()));
 
     let apply_config = |on_battery: bool| {
         cpu::tweak(
@@ -130,7 +134,6 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
 
     apply_config(upower_proxy.on_battery().await.unwrap_or(false));
 
-    let mut process_monitoring_handle = None;
     let mut foreground_processes: Option<Vec<u32>> = None;
     let mut process_map = BTreeMap::new();
 
@@ -174,6 +177,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
                     }
 
                     if current >= -9 && current <= 9 {
+                        tracing::debug!("Set {exe} to {priority}");
                         crate::nice::set_priority(pid, priority as i32)
                     }
                 }
@@ -184,17 +188,15 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
             }
 
             Event::SetForegroundProcess(pid) => {
-                tracing::debug!("SetForegroundProcess({pid})");
                 if let Some(foreground_priority) = config.foreground {
+                    tracing::debug!("SetForegroundProcess({pid}): {foreground_priority}");
+
                     if let Some(prev) = foreground_processes.take() {
                         let priority = config.background.unwrap_or(0) as i32;
                         for process in prev {
+                            tracing::debug!("Reverting {process} to {priority}");
                             crate::nice::set_priority(process, priority);
                         }
-                    } else if process_monitoring_handle.is_none() {
-                        process_monitoring_handle =
-                            Some(tokio::spawn(process_monitor(tx.clone(), pid)));
-                        continue;
                     }
 
                     crate::nice::set_priority(pid, foreground_priority as i32);
@@ -211,6 +213,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
                                             .unwrap_or(foreground_priority)
                                             as i32;
 
+                                        tracing::debug!("Set {exe} to {priority}");
                                         crate::nice::set_priority(*pid, priority);
                                     }
 
@@ -272,9 +275,7 @@ async fn battery_monitor(mut events: PropertyStream<'_, bool>, tx: Sender<Event>
     }
 }
 
-async fn process_monitor(tx: Sender<Event>, foreground: u32) {
-    let mut initial = Some(foreground);
-
+async fn process_monitor(tx: Sender<Event>) {
     loop {
         if let Ok(procfs) = Path::new("/proc").read_dir() {
             let mut parents = BTreeMap::<u32, Option<u32>>::new();
@@ -318,11 +319,6 @@ async fn process_monitor(tx: Sender<Event>, foreground: u32) {
             }
 
             let _ = tx.send(Event::UpdateProcessMap(parents)).await;
-            tokio::task::yield_now().await;
-        }
-
-        if let Some(pid) = initial.take() {
-            let _ = tx.send(Event::SetForegroundProcess(pid)).await;
             tokio::task::yield_now().await;
         }
 
