@@ -19,6 +19,11 @@ upower_dbus = "0.2.0"
 zbus = "2.1.1"
 zvariant = "3.1.2"
 ron = "0.7.0"
+tracing = "0.1.30"
+
+[dependencies.tracing-subscriber]
+version = "0.3.8"
+features = ["env-filter"]
 
 [dependencies.tokio]
 version = "1.16.1"

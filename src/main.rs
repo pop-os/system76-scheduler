@@ -10,12 +10,11 @@ mod dbus;
 mod nice;
 mod paths;
 
-use std::{collections::BTreeMap, path::Path, time::Duration};
-
 use crate::config::{cpu::Config as CpuConfig, Config};
 use crate::paths::SchedPaths;
 use argh::FromArgs;
 use dbus::{CpuMode, Server};
+use std::{collections::BTreeMap, path::Path, time::Duration};
 use tokio::sync::mpsc::Sender;
 use upower_dbus::UPowerProxy;
 use zbus::{Connection, PropertyStream};
@@ -59,6 +58,12 @@ enum Event {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_writer(std::io::stderr)
+        .without_time()
+        .init();
+
     let connection = Connection::system().await?;
 
     let args: Args = argh::from_env();
@@ -73,8 +78,12 @@ async fn cpu(connection: Connection, args: CpuArgs) -> anyhow::Result<()> {
     let mut connection = dbus::ClientProxy::new(&connection).await?;
 
     match args.profile.as_ref() {
-        Some(profile) => connection.set_cpu_profile(profile).await?,
-        None => println!("{}", connection.cpu_profile().await?),
+        Some(profile) => {
+            connection.set_cpu_profile(profile).await?;
+        }
+        None => {
+            println!("{}", connection.cpu_profile().await?);
+        }
     }
 
     Ok(())
@@ -110,10 +119,10 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
         cpu::tweak(
             &paths,
             &if on_battery {
-                eprintln!("auto config applying default config");
+                tracing::debug!("auto config applying default config");
                 CpuConfig::default_config()
             } else {
-                eprintln!("auto config applying responsive config");
+                tracing::debug!("auto config applying responsive config");
                 CpuConfig::responsive_config()
             },
         );
@@ -137,7 +146,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
         let iface_handle = match interface_result {
             Ok(iface_handler) => iface_handler,
             Err(why) => {
-                eprintln!("DBus interface not reachable: {:#?}", why);
+                tracing::error!("DBus interface not reachable: {:#?}", why);
                 break;
             }
         };
@@ -175,7 +184,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
             }
 
             Event::SetForegroundProcess(pid) => {
-                eprintln!("SetForegroundProcess({pid})");
+                tracing::debug!("SetForegroundProcess({pid})");
                 if let Some(foreground_priority) = config.foreground {
                     if let Some(prev) = foreground_processes.take() {
                         let priority = config.background.unwrap_or(0) as i32;
@@ -226,17 +235,17 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
 
             Event::SetCpuMode => match interface.cpu_mode {
                 CpuMode::Auto => {
-                    eprintln!("applying auto config");
+                    tracing::debug!("applying auto config");
                     apply_config(upower_proxy.on_battery().await.unwrap_or(false));
                 }
 
                 CpuMode::Default => {
-                    eprintln!("applying default config");
+                    tracing::debug!("applying default config");
                     cpu::tweak(&paths, &CpuConfig::default_config());
                 }
 
                 CpuMode::Responsive => {
-                    eprintln!("applying responsive config");
+                    tracing::debug!("applying responsive config");
                     cpu::tweak(&paths, &CpuConfig::responsive_config());
                 }
 
@@ -245,7 +254,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
 
             Event::SetCustomCpuMode => {
                 if let Some(config) = CpuConfig::custom_config(&interface.cpu_profile) {
-                    eprintln!("applying {} config", interface.cpu_profile);
+                    tracing::debug!("applying {} config", interface.cpu_profile);
                     cpu::tweak(&paths, &config);
                 }
             }
@@ -303,9 +312,8 @@ async fn process_monitor(tx: Sender<Event>, foreground: u32) {
                 if let Ok(exe) = proc_path.join("exe").canonicalize() {
                     if let Some(exe) = exe.file_name().and_then(|x| x.to_str()).map(String::from) {
                         let _ = tx.send(Event::SetAutoBackgroundPriority(pid, exe)).await;
+                        tokio::task::yield_now().await;
                     }
-
-                    tokio::task::yield_now().await;
                 }
             }
 
