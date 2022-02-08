@@ -49,11 +49,10 @@ struct DaemonArgs {}
 #[derive(Debug)]
 enum Event {
     OnBattery(bool),
-    SetAutoBackgroundPriority(u32, String),
     SetCpuMode,
     SetCustomCpuMode,
     SetForegroundProcess(u32),
-    UpdateProcessMap(BTreeMap<u32, Option<u32>>),
+    UpdateProcessMap(BTreeMap<u32, Option<u32>>, Vec<(u32, String)>),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -157,34 +156,34 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
         let interface = iface_handle.get().await;
 
         match event {
-            Event::SetAutoBackgroundPriority(pid, exe) => {
-                if let Some(current) = foreground_processes.as_ref() {
-                    if current.contains(&pid) {
-                        continue;
-                    }
-                }
-
-                let current = unsafe { libc::getpriority(libc::PRIO_PROCESS, pid) };
-
-                let priority = automatic_assignments
-                    .get(&exe)
-                    .cloned()
-                    .or(config.background);
-
-                if let Some(mut priority) = priority {
-                    if priority < -9 {
-                        priority = -9;
-                    }
-
-                    if current >= -9 && current <= 9 {
-                        tracing::debug!("Set {exe} to {priority}");
-                        crate::nice::set_priority(pid, priority as i32)
-                    }
-                }
-            }
-
-            Event::UpdateProcessMap(map) => {
+            Event::UpdateProcessMap(map, background_processes) => {
                 process_map = map;
+
+                for (pid, exe) in background_processes {
+                    if let Some(current) = foreground_processes.as_ref() {
+                        if current.contains(&pid) {
+                            continue;
+                        }
+                    }
+
+                    let current = unsafe { libc::getpriority(libc::PRIO_PROCESS, pid) };
+
+                    let priority = automatic_assignments
+                        .get(&exe)
+                        .cloned()
+                        .or(config.background);
+
+                    if let Some(mut priority) = priority {
+                        if priority < -9 {
+                            priority = -9;
+                        }
+
+                        if current >= -9 && current <= 9 {
+                            tracing::debug!("Set {exe} to {priority}");
+                            crate::nice::set_priority(pid, priority as i32)
+                        }
+                    }
+                }
             }
 
             Event::SetForegroundProcess(pid) => {
@@ -278,6 +277,7 @@ async fn battery_monitor(mut events: PropertyStream<'_, bool>, tx: Sender<Event>
 async fn process_monitor(tx: Sender<Event>) {
     loop {
         if let Ok(procfs) = Path::new("/proc").read_dir() {
+            let mut background_processes = Vec::new();
             let mut parents = BTreeMap::<u32, Option<u32>>::new();
 
             for proc_entry in procfs.filter_map(Result::ok) {
@@ -312,14 +312,14 @@ async fn process_monitor(tx: Sender<Event>) {
                 // Prevents kernel processes from having their priorities changed.
                 if let Ok(exe) = proc_path.join("exe").canonicalize() {
                     if let Some(exe) = exe.file_name().and_then(|x| x.to_str()).map(String::from) {
-                        let _ = tx.send(Event::SetAutoBackgroundPriority(pid, exe)).await;
-                        tokio::task::yield_now().await;
+                        background_processes.push((pid, exe));
                     }
                 }
             }
 
-            let _ = tx.send(Event::UpdateProcessMap(parents)).await;
-            tokio::task::yield_now().await;
+            let _ = tx
+                .send(Event::UpdateProcessMap(parents, background_processes))
+                .await;
         }
 
         tokio::time::sleep(Duration::from_secs(60)).await;
