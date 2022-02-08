@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::path::Path;
 
-const DISTRIBUTION_PATH: &str = "/usr/lib/";
+const DISTRIBUTION_PATH: &str = "/usr/share/";
 const SYSTEM_CONF_PATH: &str = "/etc/";
 
 const CONFIG_PATH: &str = "system76-scheduler/config.ron";
@@ -19,21 +19,23 @@ pub struct Config {
 
 impl Config {
     pub fn read() -> Config {
-        let mut path = [SYSTEM_CONF_PATH, CONFIG_PATH].concat();
+        let directories = [
+            [SYSTEM_CONF_PATH, CONFIG_PATH].concat(),
+            [DISTRIBUTION_PATH, CONFIG_PATH].concat(),
+        ];
 
-        if let Ok(config) = std::fs::read_to_string(path) {
-            if let Ok(config) = ron::from_str(&config) {
-                return config;
+        for path in directories {
+            if let Ok(config) = std::fs::read_to_string(&path) {
+                match ron::from_str(&config) {
+                    Ok(config) => return config,
+                    Err(why) => {
+                        tracing::error!("{}: {:?}", path, why);
+                    }
+                }
             }
         }
 
-        path = [DISTRIBUTION_PATH, CONFIG_PATH].concat();
-
-        if let Ok(config) = std::fs::read_to_string(path) {
-            if let Ok(config) = ron::from_str(&config) {
-                return config;
-            }
-        }
+        tracing::info!("Using default config values due to config error");
 
         Config {
             background: Some(5),
