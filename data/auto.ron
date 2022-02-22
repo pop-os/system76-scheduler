@@ -3,6 +3,7 @@
 -5: [
     "gnome-shell",
     "kwin",
+    "sway",
     "Xorg"
 ],
 // Absolute lowest priority
