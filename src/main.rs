@@ -140,6 +140,8 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
     let config = Config::read();
     let automatic_assignments = Config::automatic_assignments();
 
+    let mut exe_buf = String::with_capacity(64);
+
     while let Some(event) = rx.recv().await {
         let interface_result = connection
             .object_server()
@@ -206,9 +208,9 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
                         for (pid, parent) in process_map.iter() {
                             if let Some(parent) = parent {
                                 if processes.contains(parent) && !processes.contains(pid) {
-                                    if let Some(exe) = exe_of_pid(*pid) {
+                                    if let Some(exe) = exe_of_pid(&mut exe_buf, *pid) {
                                         let priority = automatic_assignments
-                                            .get(&exe)
+                                            .get(exe)
                                             .cloned()
                                             .unwrap_or(foreground_priority)
                                             as i32;
@@ -331,10 +333,15 @@ async fn process_monitor(tx: Sender<Event>) {
     }
 }
 
-fn exe_of_pid(pid: u32) -> Option<String> {
-    if let Ok(exe) = Path::new(&format!("/proc/{}/exe", pid)).canonicalize() {
-        if let Some(exe) = exe.file_name().and_then(|x| x.to_str()).map(String::from) {
-            return Some(exe);
+fn exe_of_pid(buf: &mut String, pid: u32) -> Option<&str> {
+    let mut itoa = itoa::Buffer::new();
+    let exe = concat_in_place::strcat!("/proc/" itoa.format(pid) "/exe");
+
+    if let Ok(exe) = Path::new(&*exe).canonicalize() {
+        if let Some(exe) = exe.file_name().and_then(|x| x.to_str()) {
+            buf.clear();
+            buf.push_str(exe);
+            return Some(&*buf);
         }
     }
 
