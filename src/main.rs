@@ -15,7 +15,7 @@ use crate::config::{cpu::Config as CpuConfig, Config};
 use crate::paths::SchedPaths;
 use argh::FromArgs;
 use dbus::{CpuMode, Server};
-use std::{collections::BTreeMap, path::Path, time::Duration};
+use std::{collections::HashMap, path::Path, time::Duration};
 use tokio::sync::mpsc::Sender;
 use upower_dbus::UPowerProxy;
 use zbus::{Connection, PropertyStream};
@@ -53,7 +53,7 @@ enum Event {
     SetCpuMode,
     SetCustomCpuMode,
     SetForegroundProcess(u32),
-    UpdateProcessMap(BTreeMap<u32, Option<u32>>, Vec<(u32, String)>),
+    UpdateProcessMap(HashMap<u32, Option<u32>>, Vec<(u32, String)>),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -135,7 +135,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
     apply_config(upower_proxy.on_battery().await.unwrap_or(false));
 
     let mut foreground_processes: Option<Vec<u32>> = None;
-    let mut process_map = BTreeMap::new();
+    let mut process_map = HashMap::new();
 
     let config = Config::read();
     let automatic_assignments = Config::automatic_assignments();
@@ -280,10 +280,13 @@ async fn battery_monitor(mut events: PropertyStream<'_, bool>, tx: Sender<Event>
 async fn process_monitor(tx: Sender<Event>) {
     let mut file_buf = String::with_capacity(2048);
 
+    let mut background_processes = Vec::with_capacity(256);
+    let mut parents = HashMap::<u32, Option<u32>>::with_capacity(256);
+
     loop {
         if let Ok(procfs) = Path::new("/proc").read_dir() {
-            let mut background_processes = Vec::new();
-            let mut parents = BTreeMap::<u32, Option<u32>>::new();
+            background_processes.clear();
+            parents.clear();
 
             for proc_entry in procfs.filter_map(Result::ok) {
                 let proc_path = proc_entry.path();
@@ -325,7 +328,10 @@ async fn process_monitor(tx: Sender<Event>) {
             }
 
             let _ = tx
-                .send(Event::UpdateProcessMap(parents, background_processes))
+                .send(Event::UpdateProcessMap(
+                    parents.clone(),
+                    background_processes.clone(),
+                ))
                 .await;
         }
 
