@@ -20,6 +20,8 @@ zbus = "2.1.1"
 zvariant = "3.1.2"
 ron = "0.7.0"
 tracing = "0.1.30"
+concat-in-place = "1.1.0"
+itoa = "1.0.1"
 
 [dependencies.tracing-subscriber]
 version = "0.3.8"
