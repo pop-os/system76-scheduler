@@ -1,6 +1,7 @@
 // Copyright 2021-2022 System76 <info@system76.com>
 // SPDX-License-Identifier: MPL-2.0
 
+use concat_in_place::strcat;
 use serde::Deserialize;
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
@@ -20,8 +21,8 @@ pub struct Config {
 impl Config {
     pub fn read() -> Config {
         let directories = [
-            [SYSTEM_CONF_PATH, CONFIG_PATH].concat(),
-            [DISTRIBUTION_PATH, CONFIG_PATH].concat(),
+            strcat!(SYSTEM_CONF_PATH CONFIG_PATH),
+            strcat!(DISTRIBUTION_PATH CONFIG_PATH),
         ];
 
         for path in directories {
@@ -108,13 +109,14 @@ pub mod cpu {
 
     impl Config {
         pub fn config_path(config: &str) -> Option<String> {
-            let mut path = [SYSTEM_CONF_PATH, PROFILES_PATH, config, ".ron"].concat();
+            let mut path = strcat!(SYSTEM_CONF_PATH PROFILES_PATH config ".ron");
 
             if Path::new(&path).exists() {
                 return Some(path);
             }
 
-            path = [DISTRIBUTION_PATH, PROFILES_PATH, config, ".ron"].concat();
+            path.clear();
+            strcat!(&mut path, DISTRIBUTION_PATH PROFILES_PATH config ".ron");
 
             if Path::new(&path).exists() {
                 return Some(path);
