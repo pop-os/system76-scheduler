@@ -25,9 +25,11 @@ impl Config {
             strcat!(DISTRIBUTION_PATH CONFIG_PATH),
         ];
 
+        let mut buffer = String::with_capacity(4096);
+
         for path in directories {
-            if let Ok(config) = std::fs::read_to_string(&path) {
-                match ron::from_str(&config) {
+            if let Ok(config) = crate::utils::read_into_string(&mut buffer, &path) {
+                match ron::from_str(config) {
                     Ok(config) => return config,
                     Err(why) => {
                         tracing::error!("{}: {:?}", path, why);
