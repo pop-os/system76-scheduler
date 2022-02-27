@@ -9,6 +9,7 @@ mod cpu;
 mod dbus;
 mod nice;
 mod paths;
+mod utils;
 
 use crate::config::{cpu::Config as CpuConfig, Config};
 use crate::paths::SchedPaths;
@@ -275,6 +276,8 @@ async fn battery_monitor(mut events: PropertyStream<'_, bool>, tx: Sender<Event>
 }
 
 async fn process_monitor(tx: Sender<Event>) {
+    let mut file_buf = String::with_capacity(2048);
+
     loop {
         if let Ok(procfs) = Path::new("/proc").read_dir() {
             let mut background_processes = Vec::new();
@@ -295,7 +298,9 @@ async fn process_monitor(tx: Sender<Event>) {
 
                 let mut parent = None;
 
-                if let Ok(status) = tokio::fs::read_to_string(proc_path.join("status")).await {
+                let status = proc_path.join("status");
+
+                if let Ok(status) = crate::utils::read_into_string(&mut file_buf, &*status) {
                     for line in status.lines() {
                         if let Some(ppid) = line.strip_prefix("PPid:") {
                             if let Ok(ppid) = ppid.trim().parse::<u32>() {
