@@ -134,7 +134,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
 
     apply_config(upower_proxy.on_battery().await.unwrap_or(false));
 
-    let mut foreground_processes: Option<Vec<u32>> = None;
+    let mut fg_processes: Vec<u32> = Vec::with_capacity(256);
     let mut process_map = HashMap::new();
 
     let config = Config::read();
@@ -163,10 +163,8 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
                 process_map = map;
 
                 for (pid, exe) in background_processes {
-                    if let Some(current) = foreground_processes.as_ref() {
-                        if current.contains(&pid) {
-                            continue;
-                        }
+                    if fg_processes.contains(&pid) {
+                        continue;
                     }
 
                     let current = unsafe { libc::getpriority(libc::PRIO_PROCESS, pid) };
@@ -193,21 +191,22 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
                 if let Some(foreground_priority) = config.foreground {
                     tracing::debug!("SetForegroundProcess({pid}): {foreground_priority}");
 
-                    if let Some(prev) = foreground_processes.take() {
+                    if fg_processes.is_empty() {
                         let priority = config.background.unwrap_or(0) as i32;
-                        for process in prev {
+                        for process in fg_processes.drain(..) {
                             tracing::debug!("Reverting {process} to {priority}");
                             crate::nice::set_priority(process, priority);
                         }
                     }
 
+                    fg_processes.push(pid);
+
                     crate::nice::set_priority(pid, foreground_priority as i32);
-                    let mut processes = vec![pid];
 
                     'outer: loop {
                         for (pid, parent) in process_map.iter() {
                             if let Some(parent) = parent {
-                                if processes.contains(parent) && !processes.contains(pid) {
+                                if fg_processes.contains(parent) && !fg_processes.contains(pid) {
                                     if let Some(exe) = exe_of_pid(&mut exe_buf, *pid) {
                                         let priority = automatic_assignments
                                             .get(exe)
@@ -219,7 +218,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
                                         crate::nice::set_priority(*pid, priority);
                                     }
 
-                                    processes.push(*pid);
+                                    fg_processes.push(*pid);
                                     continue 'outer;
                                 }
                             }
@@ -227,8 +226,6 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
 
                         break;
                     }
-
-                    foreground_processes = Some(processes);
                 }
             }
 
