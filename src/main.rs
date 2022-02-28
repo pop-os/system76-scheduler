@@ -191,7 +191,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
                 if let Some(foreground_priority) = config.foreground {
                     tracing::debug!("SetForegroundProcess({pid}): {foreground_priority}");
 
-                    if fg_processes.is_empty() {
+                    if !fg_processes.is_empty() {
                         let priority = config.background.unwrap_or(0) as i32;
                         for process in fg_processes.drain(..) {
                             tracing::debug!("Reverting {process} to {priority}");
