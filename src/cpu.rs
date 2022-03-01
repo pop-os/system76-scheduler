@@ -11,11 +11,12 @@ use std::{fs, io};
 pub fn tweak(paths: &SchedPaths, conf: &Config) {
     let modifier = latency_modifier(num_cpus::get() as f64);
 
-    let min_gran = conf.latency as f64 / conf.nr_latency as f64;
+    let min_gran = (modifier as f64 * conf.latency as f64 / conf.nr_latency as f64) as u64;
+    let wakeup_gran = (modifier as f64 * conf.wakeup_granularity) as u64;
 
     write_value(paths.latency, modifier * conf.latency);
-    write_value(paths.min_gran, modifier as f64 * min_gran);
-    write_value(paths.wakeup_gran, modifier as f64 * conf.wakeup_granularity);
+    write_value(paths.min_gran, min_gran);
+    write_value(paths.wakeup_gran, wakeup_gran);
     write_value(BANDWIDTH_SIZE_PATH, conf.bandwidth_size * 1000);
 }
 
