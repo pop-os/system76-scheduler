@@ -1,3 +1,6 @@
+// WARNING: This file will not have modifications preserved on upgrade.
+// Instead, make a config.ron file under /etc/system76-scheduler/ to configure.
+
 (
 // The priority to assign background tasks.
 background: Some(5),
