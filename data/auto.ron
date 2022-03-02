@@ -1,7 +1,5 @@
-// WARNING: This file will not have modifications preserved on upgrade.
-// The same holds for any file under /usr/share/system76-scheduler/
-//
-// Instead, make new .ron files under /etc/system76-scheduler/assignments/ to configure.
+// WARNING: Modifications to this file will not be preserved on upgrade.
+// To configure, make new .ron files under /etc/system76-scheduler/assignments/.
 
 {
 // High priority
