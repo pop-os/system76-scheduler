@@ -58,13 +58,17 @@ impl Config {
             if let Ok(dir) = directory.read_dir() {
                 for entry in dir.filter_map(Result::ok) {
                     if let Ok(string) = fs::read_to_string(entry.path()) {
-                        if let Ok(buffer) = ron::from_str::<BTreeMap<i8, HashSet<String>>>(&string)
-                        {
-                            for (priority, commands) in buffer {
-                                for command in commands {
-                                    assignments.insert(command, priority);
-                                }
-                            }
+                        match ron::from_str::<BTreeMap<i8, HashSet<String>>>(&string) {
+                            Ok(buffer) => {
+				                        for (priority, commands) in buffer {
+				                            for command in commands {
+				                                assignments.insert(command, priority);
+				                            }
+				                        }
+				                    },
+				                    Err(why) => {
+				                      tracing::error!("{:#?}: {:?}", entry, why);
+				                    }
                         }
                     }
                 }
