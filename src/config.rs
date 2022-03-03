@@ -32,7 +32,7 @@ impl Config {
                 match ron::from_str(config) {
                     Ok(config) => return config,
                     Err(why) => {
-                        tracing::error!("{}: {:?}", path, why);
+                        tracing::error!("Error while reading {}:\n{:#?}", path, why);
                     }
                 }
             }
@@ -67,7 +67,7 @@ impl Config {
 				                        }
 				                    },
 				                    Err(why) => {
-				                      tracing::error!("{:#?}: {:?}", entry, why);
+				                      tracing::error!("Error while reading {:?}:\n{:#?}", entry.path(), why);
 				                    }
                         }
                     }
