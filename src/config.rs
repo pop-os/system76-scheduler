@@ -3,6 +3,7 @@
 
 use concat_in_place::strcat;
 use serde::Deserialize;
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::path::Path;
@@ -32,13 +33,13 @@ impl Config {
                 match ron::from_str(config) {
                     Ok(config) => return config,
                     Err(why) => {
-												tracing::error!(
-														"{:?}: {} on line {}, column {}",
-														path,
-														why.code,
-														why.position.line,
-														why.position.col
-												);
+                        tracing::error!(
+                            "{:?}: {} on line {}, column {}",
+                            path,
+                            why.code,
+                            why.position.line,
+                            why.position.col
+                        );
                     }
                 }
             }
@@ -66,21 +67,21 @@ impl Config {
                     if let Ok(string) = fs::read_to_string(entry.path()) {
                         match ron::from_str::<BTreeMap<i8, HashSet<String>>>(&string) {
                             Ok(buffer) => {
-				                        for (priority, commands) in buffer {
-				                            for command in commands {
-				                                assignments.insert(command, priority);
-				                            }
-				                        }
-				                    },
-				                    Err(why) => {
-																tracing::error!(
-																		"{:?}: {} on line {}, column {}",
-																		entry.path(),
-																		why.code,
-																		why.position.line,
-																		why.position.col
-																);
-				                    }
+                                for (priority, commands) in buffer {
+                                    for command in commands {
+                                        assignments.insert(command, priority);
+                                    }
+                                }
+                            }
+                            Err(why) => {
+                                tracing::error!(
+                                    "{:?}: {} on line {}, column {}",
+                                    entry.path(),
+                                    why.code,
+                                    why.position.line,
+                                    why.position.col
+                                );
+                            }
                         }
                     }
                 }
@@ -93,7 +94,7 @@ impl Config {
 
 pub mod cpu {
     use serde::Deserialize;
-    use std::{fs, path::Path};
+    use std::{borrow::Cow, fs, path::Path};
 
     use super::*;
 
@@ -104,6 +105,7 @@ pub mod cpu {
         nr_latency: 8,
         wakeup_granularity: 1.0,
         bandwidth_size: 5,
+        preempt: preempt_default(),
     };
 
     const RESPONSIVE_CONFIG: Config = Config {
@@ -111,6 +113,7 @@ pub mod cpu {
         nr_latency: 10,
         wakeup_granularity: 0.5,
         bandwidth_size: 3,
+        preempt: Cow::Borrowed("full"),
     };
 
     #[derive(Deserialize)]
@@ -123,6 +126,9 @@ pub mod cpu {
         pub wakeup_granularity: f64,
         /// Amount of time to allocate from global to local pool in us
         pub bandwidth_size: u64,
+        /// The type of preemption to use.
+        #[serde(default = "preempt_default")]
+        pub preempt: Cow<'static, str>,
     }
 
     impl Config {
@@ -175,4 +181,8 @@ pub mod cpu {
             conf
         }
     }
+}
+
+const fn preempt_default() -> Cow<'static, str> {
+    Cow::Borrowed("voluntary")
 }

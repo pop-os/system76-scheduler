@@ -4,6 +4,7 @@
 use std::path::Path;
 
 pub const BANDWIDTH_SIZE_PATH: &str = "/proc/sys/kernel/sched_cfs_bandwidth_slice_us";
+pub const PREEMPT_PATH: &str = "/sys/kernel/debug/sched/preempt";
 
 #[derive(Debug, thiserror::Error)]
 pub enum SchedPathsError {
@@ -16,6 +17,7 @@ pub struct SchedPaths {
     pub min_gran: &'static str,
     pub wakeup_gran: &'static str,
     pub migration_cost: &'static str,
+    pub preempt: Option<&'static str>,
 }
 
 impl SchedPaths {
@@ -25,6 +27,7 @@ impl SchedPaths {
             min_gran: "/sys/kernel/debug/sched/min_granularity_ns",
             wakeup_gran: "/sys/kernel/debug/sched/wakeup_granularity_ns",
             migration_cost: "/sys/kernel/debug/sched/migration_cost_ns",
+            preempt: None,
         };
 
         if !Path::new(paths.latency).exists() {
@@ -37,6 +40,10 @@ impl SchedPaths {
             paths.min_gran = "/proc/sys/kernel/sched_min_granularity_ns";
             paths.wakeup_gran = "/proc/sys/kernel/sched_wakeup_granularity_ns";
             paths.migration_cost = "/proc/sys/kernel/sched_migration_cost_ns";
+        }
+
+        if Path::new(PREEMPT_PATH).exists() {
+            paths.preempt = Some(PREEMPT_PATH);
         }
 
         Ok(paths)
