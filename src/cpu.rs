@@ -18,6 +18,10 @@ pub fn tweak(paths: &SchedPaths, conf: &Config) {
     write_value(paths.min_gran, min_gran);
     write_value(paths.wakeup_gran, wakeup_gran);
     write_value(BANDWIDTH_SIZE_PATH, conf.bandwidth_size * 1000);
+
+    if let Some(preempt_path) = paths.preempt {
+        write_value(preempt_path, &*conf.preempt);
+    }
 }
 
 /// Write a value that implements `Display` to a file
