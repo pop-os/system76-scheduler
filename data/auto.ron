@@ -4,6 +4,7 @@
 {
 // High priority
 -5: [
+    "amsynth",
     "gnome-shell",
     "kwin",
     "sway",
