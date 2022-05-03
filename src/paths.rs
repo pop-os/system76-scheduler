@@ -12,6 +12,7 @@ pub enum SchedPathsError {
     NotSupported,
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub struct SchedPaths {
     pub latency: &'static str,
     pub min_gran: &'static str,

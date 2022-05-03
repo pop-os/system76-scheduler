@@ -68,7 +68,7 @@ impl Server {
     async fn set_cpu_mode(&mut self, cpu_mode: CpuMode) {
         self.cpu_mode = cpu_mode;
 
-        let _ = self.tx.send(Event::SetCpuMode).await;
+        let _res = self.tx.send(Event::SetCpuMode).await;
     }
 
     async fn set_cpu_profile(&mut self, profile: String) {
@@ -81,13 +81,13 @@ impl Server {
             _ => {
                 self.cpu_mode = CpuMode::Custom;
 
-                let _ = self.tx.send(Event::SetCustomCpuMode).await;
+                let _res = self.tx.send(Event::SetCustomCpuMode).await;
             }
         }
     }
 
     /// This process will have its process group prioritized over background processes
     async fn set_foreground_process(&mut self, pid: u32) {
-        let _ = self.tx.send(Event::SetForegroundProcess(pid)).await;
+        let _res = self.tx.send(Event::SetForegroundProcess(pid)).await;
     }
 }
