@@ -96,7 +96,7 @@ pub mod cpu {
     use serde::Deserialize;
     use std::{borrow::Cow, fs, path::Path};
 
-    use super::*;
+    use super::{preempt_default, strcat, DISTRIBUTION_PATH, SYSTEM_CONF_PATH};
 
     const PROFILES_PATH: &str = "system76-scheduler/cpu/";
 

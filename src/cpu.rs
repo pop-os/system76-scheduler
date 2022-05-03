@@ -2,12 +2,15 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use crate::config::cpu::Config;
-use crate::paths::*;
+use crate::paths::{SchedPaths, BANDWIDTH_SIZE_PATH};
 use std::fmt::Display;
 use std::io::Write;
 use std::{fs, io};
 
 /// Apply a configuration to CPU scheduler latencies.
+#[allow(clippy::cast_precision_loss)]
+#[allow(clippy::cast_sign_loss)]
+#[allow(clippy::cast_possible_truncation)]
 pub fn tweak(paths: &SchedPaths, conf: &Config) {
     let modifier = latency_modifier(num_cpus::get() as f64);
 
@@ -39,6 +42,8 @@ fn write_value<V: Display>(path: &str, value: V) {
 }
 
 /// Latency modifier to be applied to scheduler latencies based on CPU core count.
+#[allow(clippy::cast_sign_loss)]
+#[allow(clippy::cast_possible_truncation)]
 fn latency_modifier(nprocs: f64) -> u64 {
     10u64.pow(6) * (1f64 + nprocs.ln() / 2f64.ln()) as u64
 }
@@ -47,6 +52,6 @@ fn latency_modifier(nprocs: f64) -> u64 {
 mod tests {
     #[test]
     fn latency_modifier() {
-        assert_eq!(5000000, super::latency_modifier(16f64));
+        assert_eq!(5_000_000, super::latency_modifier(16f64));
     }
 }

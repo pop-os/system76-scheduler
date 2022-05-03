@@ -2,6 +2,13 @@
 // To configure, make new .ron files under /etc/system76-scheduler/assignments/.
 
 {
+// Very high
+-11: [
+    "easyeffects",
+    "pipewire",
+    "pipewire-pulse",
+    "wireplumber"
+],
 // High priority
 -5: [
     "gnome-shell",
