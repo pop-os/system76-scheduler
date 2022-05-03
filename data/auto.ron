@@ -3,21 +3,63 @@
 
 {
 // Very high
--11: [
+-9: [
     "easyeffects",
-    "pipewire",
-    "pipewire-pulse",
-    "wireplumber"
 ],
 // High priority
 -5: [
+    "amsynth",
     "gnome-shell",
     "kwin",
     "sway",
-    "Xorg"
+    "steam",
+    "Xorg",
+],
+// Default
+0: [
+    "dbus",
+    "dbus-daemon",
+    "systemd",
+    "sshd",
+],
+// Low
+9: [
+    "accounts-daemon",
+    "acpid",
+    "automount",
+    "avahi-daemon",
+    "bluetoothd",
+    "colord",
+    "cron",
+    "cups-browsed",
+    "cupsd",
+    "dconf-service",
+    "dnsmasq",
+    "dockerd",
+    "fwupd",
+    "FAHClient",
+    "hidpi-daemon",
+    "iwd",
+    "ModemManager",
+    "NetworkManager",
+    "packagekitd",
+    "pop-system-updater",
+    "rpcbind",
+    "system76-daemon",
+    "system76-firmware-daemon",
+    "system76-power",
+    "system76-scheduler",
+    "system76-user-daemon",
+    "thermald",
+    "tracker-miner-fs-3",
+    "udisksd",
+    "upowerd",
 ],
 // Absolute lowest priority
 19: [
+    "boinc",
+    "FAHClient",
+    "FAHCoreWrapper",
     "c++",
     "cargo",
     "clang",
@@ -26,5 +68,6 @@
     "gcc",
     "lld",
     "make",
+    "mold",
     "rustc",
 ]}
