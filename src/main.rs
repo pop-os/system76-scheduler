@@ -9,10 +9,12 @@ mod cpu;
 mod dbus;
 mod nice;
 mod paths;
+mod priority;
 mod utils;
 
 use crate::config::{cpu::Config as CpuConfig, Config};
 use crate::paths::SchedPaths;
+use crate::priority::{is_assignable, Priority};
 use argh::FromArgs;
 use dbus::{CpuMode, Server};
 use std::{collections::HashMap, path::Path, time::Duration};
@@ -44,6 +46,7 @@ struct CpuArgs {
 
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "daemon")]
+#[allow(clippy::doc_markdown)]
 /// Launch the DBus service.
 struct DaemonArgs {}
 
@@ -53,11 +56,15 @@ enum Event {
     SetCpuMode,
     SetCustomCpuMode,
     SetForegroundProcess(u32),
-    UpdateProcessMap(HashMap<u32, Option<u32>>, Vec<(u32, String)>),
+    UpdateProcessMap(HashMap<u32, Option<u32>>, Vec<u32>),
 }
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
+    if std::env::var_os("RUST_LOG").is_none() {
+        std::env::set_var("RUST_LOG", "info");
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .with_writer(std::io::stderr)
@@ -89,6 +96,7 @@ async fn cpu(connection: Connection, args: CpuArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 async fn daemon(connection: Connection) -> anyhow::Result<()> {
     let paths = SchedPaths::new()?;
 
@@ -136,11 +144,27 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
 
     let mut fg_processes: Vec<u32> = Vec::with_capacity(256);
     let mut process_map = HashMap::new();
+    let mut foreground_process = None;
 
     let config = Config::read();
     let automatic_assignments = Config::automatic_assignments();
 
     let mut exe_buf = String::with_capacity(64);
+
+    // Gets the config-assigned priority of a process.
+    let mut assigned_priority = |pid: u32| -> Priority {
+        if !is_assignable(pid) {
+            return Priority::NotAssignable;
+        }
+
+        if let Some(exe) = exe_of_pid(&mut exe_buf, pid) {
+            return automatic_assignments
+                .get(exe)
+                .map_or(Priority::Assignable, |v| Priority::Config(i32::from(*v)));
+        }
+
+        Priority::NotAssignable
+    };
 
     while let Some(event) = rx.recv().await {
         let interface_result = connection
@@ -162,64 +186,59 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
             Event::UpdateProcessMap(map, background_processes) => {
                 process_map = map;
 
-                for (pid, exe) in background_processes {
+                for pid in background_processes {
                     if fg_processes.contains(&pid) {
                         continue;
                     }
 
-                    let current = unsafe { libc::getpriority(libc::PRIO_PROCESS, pid) };
-
-                    let priority = automatic_assignments
-                        .get(&exe)
-                        .cloned()
-                        .or(config.background);
-
-                    if let Some(mut priority) = priority {
-                        if priority < -9 {
-                            priority = -9;
-                        }
-
-                        if current >= -9 && current <= 9 {
-                            tracing::debug!("Set {exe} to {priority}");
-                            crate::nice::set_priority(pid, priority as i32)
-                        }
+                    if let Some(priority) = assigned_priority(pid)
+                        .with_default(i32::from(config.background.unwrap_or(0)))
+                    {
+                        crate::nice::set_priority(pid, priority);
                     }
+                }
+
+                // Reassign foreground processes.
+                if let Some(process) = foreground_process.take() {
+                    let tx = tx.clone();
+                    tokio::spawn(async move {
+                        let _res = tx.send(Event::SetForegroundProcess(process)).await;
+                    });
                 }
             }
 
             Event::SetForegroundProcess(pid) => {
                 if let Some(foreground_priority) = config.foreground {
-                    tracing::debug!("SetForegroundProcess({pid}): {foreground_priority}");
+                    tracing::info!("setting foreground process {}", pid);
+                    foreground_process = Some(pid);
+                    let background_priority = i32::from(config.background.unwrap_or(0));
+                    let foreground_priority = i32::from(foreground_priority);
 
-                    if !fg_processes.is_empty() {
-                        let priority = config.background.unwrap_or(0) as i32;
-                        for process in fg_processes.drain(..) {
-                            tracing::debug!("Reverting {process} to {priority}");
+                    for process in fg_processes.drain(..) {
+                        if let Some(priority) =
+                            assigned_priority(process).with_default(background_priority)
+                        {
                             crate::nice::set_priority(process, priority);
                         }
                     }
 
-                    fg_processes.push(pid);
-
-                    crate::nice::set_priority(pid, foreground_priority as i32);
+                    if let Some(priority) = assigned_priority(pid).with_default(foreground_priority)
+                    {
+                        crate::nice::set_priority(pid, priority);
+                        fg_processes.push(pid);
+                    }
 
                     'outer: loop {
-                        for (pid, parent) in process_map.iter() {
+                        for (pid, parent) in &process_map {
                             if let Some(parent) = parent {
                                 if fg_processes.contains(parent) && !fg_processes.contains(pid) {
-                                    if let Some(exe) = exe_of_pid(&mut exe_buf, *pid) {
-                                        let priority = automatic_assignments
-                                            .get(exe)
-                                            .cloned()
-                                            .unwrap_or(foreground_priority)
-                                            as i32;
-
-                                        tracing::debug!("Set {exe} to {priority}");
+                                    if let Some(priority) =
+                                        assigned_priority(*pid).with_default(foreground_priority)
+                                    {
                                         crate::nice::set_priority(*pid, priority);
+                                        fg_processes.push(*pid);
+                                        continue 'outer;
                                     }
-
-                                    fg_processes.push(*pid);
-                                    continue 'outer;
                                 }
                             }
                         }
@@ -251,7 +270,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
                     cpu::tweak(&paths, &CpuConfig::responsive_config());
                 }
 
-                _ => (),
+                CpuMode::Custom => (),
             },
 
             Event::SetCustomCpuMode => {
@@ -269,7 +288,7 @@ async fn battery_monitor(mut events: PropertyStream<'_, bool>, tx: Sender<Event>
     use futures::StreamExt;
     while let Some(event) = events.next().await {
         if let Ok(on_battery) = event.get().await {
-            let _ = tx.send(Event::OnBattery(on_battery)).await;
+            let _res = tx.send(Event::OnBattery(on_battery)).await;
         }
     }
 }
@@ -290,7 +309,7 @@ async fn process_monitor(tx: Sender<Event>) {
 
                 let pid = if let Some(pid) = proc_path
                     .file_name()
-                    .and_then(|p| p.to_str())
+                    .and_then(std::ffi::OsStr::to_str)
                     .and_then(|p| p.parse::<u32>().ok())
                 {
                     pid
@@ -318,13 +337,13 @@ async fn process_monitor(tx: Sender<Event>) {
 
                 // Prevents kernel processes from having their priorities changed.
                 if let Ok(exe) = proc_path.join("exe").canonicalize() {
-                    if let Some(exe) = exe.file_name().and_then(|x| x.to_str()).map(String::from) {
-                        background_processes.push((pid, exe));
+                    if exe.file_name().is_some() {
+                        background_processes.push(pid);
                     }
                 }
             }
 
-            let _ = tx
+            let _res = tx
                 .send(Event::UpdateProcessMap(
                     parents.clone(),
                     background_processes.clone(),
@@ -341,7 +360,7 @@ fn exe_of_pid(buf: &mut String, pid: u32) -> Option<&str> {
     let exe = concat_in_place::strcat!("/proc/" itoa.format(pid) "/exe");
 
     if let Ok(exe) = Path::new(&*exe).canonicalize() {
-        if let Some(exe) = exe.file_name().and_then(|x| x.to_str()) {
+        if let Some(exe) = exe.file_name().and_then(std::ffi::OsStr::to_str) {
             buf.clear();
             buf.push_str(exe);
             return Some(&*buf);
