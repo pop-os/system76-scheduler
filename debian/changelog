@@ -1,3 +1,9 @@
+system76-scheduler (1.1.0) jammy; urgency=medium
+
+  * https://github.com/pop-os/system76-scheduler/releases/tag/1.1.0
+
+ -- Michael Aaron Murphy <mmstick@pm.me>  Wed, 04 May 2022 22:39:26 +0200
+
 system76-scheduler (1.0.0) focal; urgency=medium
 
   * Stable release
