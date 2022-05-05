@@ -209,7 +209,6 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
 
             Event::SetForegroundProcess(pid) => {
                 if let Some(foreground_priority) = config.foreground {
-                    tracing::info!("setting foreground process {}", pid);
                     foreground_process = Some(pid);
                     let background_priority = i32::from(config.background.unwrap_or(0));
                     let foreground_priority = i32::from(foreground_priority);
