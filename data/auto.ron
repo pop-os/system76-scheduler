@@ -3,11 +3,11 @@
 
 {
 // Very high
--9: [
+(-9, BestEffort(7)): [
     "easyeffects",
 ],
 // High priority
--5: [
+(-5, BestEffort(4)): [
     "amsynth",
     "gnome-shell",
     "kwin",
@@ -23,7 +23,7 @@
     "sshd",
 ],
 // Low
-9: [
+(9, Idle): [
     "accounts-daemon",
     "acpid",
     "automount",
@@ -37,12 +37,10 @@
     "dnsmasq",
     "dockerd",
     "fwupd",
-    "FAHClient",
     "hidpi-daemon",
     "iwd",
     "ModemManager",
     "NetworkManager",
-    "packagekitd",
     "pop-system-updater",
     "rpcbind",
     "system76-daemon",
@@ -51,12 +49,11 @@
     "system76-scheduler",
     "system76-user-daemon",
     "thermald",
-    "tracker-miner-fs-3",
     "udisksd",
     "upowerd",
 ],
 // Absolute lowest priority
-19: [
+(19, Idle): [
     "boinc",
     "FAHClient",
     "FAHCoreWrapper",
@@ -70,4 +67,6 @@
     "make",
     "mold",
     "rustc",
+    "tracker-miner-fs-3",
+    "packagekitd",
 ]}
