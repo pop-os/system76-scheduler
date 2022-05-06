@@ -52,7 +52,7 @@ A real world example below:
 ```rs
 {
     // Very high
-    (-9, BestEffort(7)): [
+    (-9, BestEffort(0)): [
         "easyeffects",
     ],
     // High priority
