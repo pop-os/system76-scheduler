@@ -341,7 +341,7 @@ async fn process_monitor(tx: Sender<Event>) {
                 parents.insert(pid, parent);
 
                 // Prevents kernel processes from having their priorities changed.
-                if let Ok(exe) = proc_path.join("exe").canonicalize() {
+                if let Ok(exe) = std::fs::read_link(proc_path.join("exe")) {
                     if exe.file_name().is_some() {
                         background_processes.push(pid);
                     }
@@ -363,8 +363,9 @@ async fn process_monitor(tx: Sender<Event>) {
 fn exe_of_pid(buf: &mut String, pid: u32) -> Option<&str> {
     let mut itoa = itoa::Buffer::new();
     let exe = concat_in_place::strcat!("/proc/" itoa.format(pid) "/exe");
+    let exe_path = Path::new(&exe);
 
-    if let Ok(exe) = std::fs::read_link(Path::new(&exe)) {
+    if let Ok(exe) = std::fs::read_link(exe_path) {
         if let Some(exe) = exe.file_name().and_then(std::ffi::OsStr::to_str) {
             buf.clear();
             buf.push_str(exe);
