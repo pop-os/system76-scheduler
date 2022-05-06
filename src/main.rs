@@ -160,7 +160,9 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
         if let Some(exe) = exe_of_pid(&mut exe_buf, pid) {
             return automatic_assignments
                 .get(exe)
-                .map_or(Priority::Assignable, |v| Priority::Config(i32::from(*v)));
+                .map_or(Priority::Assignable, |v| {
+                    Priority::Config(i32::from(v.0.get()))
+                });
         }
 
         Priority::NotAssignable

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use concat_in_place::strcat;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
@@ -13,7 +13,71 @@ const SYSTEM_CONF_PATH: &str = "/etc/";
 
 const CONFIG_PATH: &str = "system76-scheduler/config.ron";
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub enum IoPriority {
+    Idle,
+    Standard,
+    BestEffort(PriorityLevel),
+    Realtime(PriorityLevel),
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(from = "AssignmentRaw")]
+pub struct Assignment(pub CpuPriority, pub IoPriority);
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(untagged)]
+pub enum AssignmentRaw {
+    Cpu(CpuPriority),
+    Io(IoPriority),
+    Both((CpuPriority, IoPriority)),
+}
+
+impl From<AssignmentRaw> for Assignment {
+    fn from(raw: AssignmentRaw) -> Self {
+        match raw {
+            AssignmentRaw::Cpu(cpu) => Assignment(cpu, IoPriority::Standard),
+            AssignmentRaw::Io(io) => Assignment(CpuPriority::from(0), io),
+            AssignmentRaw::Both((cpu, io)) => Assignment(cpu, io),
+        }
+    }
+}
+
+/// Restricts the value between -20 through 19.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(transparent)]
+pub struct CpuPriority(i8);
+
+impl CpuPriority {
+    pub fn get(self) -> i8 {
+        self.0
+    }
+}
+
+impl From<i8> for CpuPriority {
+    fn from(level: i8) -> Self {
+        Self(level.min(19).max(-20))
+    }
+}
+
+/// Restricts the value between 0 through 7.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(transparent)]
+pub struct PriorityLevel(u8);
+
+impl PriorityLevel {
+    pub fn get(self) -> u8 {
+        self.0
+    }
+}
+
+impl From<u8> for PriorityLevel {
+    fn from(level: u8) -> Self {
+        Self(level.min(7))
+    }
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
 pub struct Config {
     pub background: Option<i8>,
     pub foreground: Option<i8>,
@@ -53,8 +117,8 @@ impl Config {
         }
     }
 
-    pub fn automatic_assignments() -> BTreeMap<String, i8> {
-        let mut assignments = BTreeMap::<String, i8>::new();
+    pub fn automatic_assignments() -> BTreeMap<String, Assignment> {
+        let mut assignments = BTreeMap::<String, Assignment>::new();
 
         let directories = [
             Path::new("/usr/share/system76-scheduler/assignments/"),
@@ -64,9 +128,21 @@ impl Config {
         for directory in directories {
             if let Ok(dir) = directory.read_dir() {
                 for entry in dir.filter_map(Result::ok) {
-                    if let Ok(string) = fs::read_to_string(entry.path()) {
-                        match ron::from_str::<BTreeMap<i8, HashSet<String>>>(&string) {
+                    let path = entry.path();
+                    if let Ok(string) = fs::read_to_string(&path) {
+                        match ron::from_str::<BTreeMap<Assignment, HashSet<String>>>(&string) {
                             Ok(buffer) => {
+                                if tracing::event_enabled!(tracing::Level::INFO) {
+                                    let log = fomat_macros::fomat!(
+                                        (path.display()) ":\n"
+                                        for value in &buffer {
+                                            "\t" [value] "\n"
+                                        }
+                                    );
+
+                                    tracing::info!("{}", log);
+                                }
+
                                 for (priority, commands) in buffer {
                                     for command in commands {
                                         assignments.insert(command, priority);
@@ -93,7 +169,7 @@ impl Config {
 }
 
 pub mod cpu {
-    use serde::Deserialize;
+    use serde::{Deserialize, Serialize};
     use std::{borrow::Cow, fs, path::Path};
 
     use super::{preempt_default, strcat, DISTRIBUTION_PATH, SYSTEM_CONF_PATH};
@@ -116,7 +192,7 @@ pub mod cpu {
         preempt: Cow::Borrowed("full"),
     };
 
-    #[derive(Deserialize)]
+    #[derive(Deserialize, Serialize)]
     pub struct Config {
         /// Preemption latency for CPU-bound tasks in ns
         pub latency: u64,
