@@ -364,7 +364,7 @@ fn exe_of_pid(buf: &mut String, pid: u32) -> Option<&str> {
     let mut itoa = itoa::Buffer::new();
     let exe = concat_in_place::strcat!("/proc/" itoa.format(pid) "/exe");
 
-    if let Ok(exe) = Path::new(&*exe).canonicalize() {
+    if let Ok(exe) = std::fs::read_link(Path::new(&exe)) {
         if let Some(exe) = exe.file_name().and_then(std::ffi::OsStr::to_str) {
             buf.clear();
             buf.push_str(exe);
