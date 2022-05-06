@@ -54,7 +54,10 @@
 ],
 // Absolute lowest priority
 (19, Idle): [
+    "apt",
+    "apt-get",
     "boinc",
+    "dpkg",
     "FAHClient",
     "FAHCoreWrapper",
     "c++",
@@ -68,5 +71,6 @@
     "mold",
     "rustc",
     "tracker-miner-fs-3",
+    "update-initramfs",
     "packagekitd",
 ]}
