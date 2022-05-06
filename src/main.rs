@@ -367,9 +367,11 @@ fn exe_of_pid(buf: &mut String, pid: u32) -> Option<&str> {
 
     if let Ok(exe) = std::fs::read_link(exe_path) {
         if let Some(exe) = exe.file_name().and_then(std::ffi::OsStr::to_str) {
-            buf.clear();
-            buf.push_str(exe);
-            return Some(&*buf);
+            if let Some(exe) = exe.split_ascii_whitespace().next() {
+                buf.clear();
+                buf.push_str(exe);
+                return Some(&*buf);
+            }
         }
     }
 
