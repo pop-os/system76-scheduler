@@ -13,28 +13,69 @@ The `SetForeground(u32)` method can be called to change the active foreground pr
 
 ## Process Priority Config
 
-RON configuration files at `/etc/system76-scheduler/assignments/` and `/usr/share/system76-scheduler/assignments/` define default priorities for processes scanned. The configuration file uses Rusty Object Notation syntax, as a `Map<i8, Vec<String>>`. The `i8` keys define the CPU priority to assign. The lower the value, the greater the priority. Values lower than `-10` will be clamped to `-10`.
+RON configuration files are stored at the following locations:
 
-```ron
+- User-config: `/etc/system76-scheduler/assignments/`
+- Distribution: `/usr/share/system76-scheduler/assignments/`
+
+They define the default priorities for processes scanned. The syntax of `.ron` configuration files in these directories is as follows:
+
+```rs
 {
-// High priority
--5: [
-    "gnome-shell",
-    "kwin",
-    "Xorg"
-],
-// Absolute lowest priority
-19: [
-    "c++",
-    "cargo",
-    "clang",
-    "cpp",
-    "g++",
-    "gcc",
-    "lld",
-    "make",
-    "rustc",
-]}
+    (CPU_PRIORITY, IO_PRIORITY): [
+        "exe_name1",
+        "exe_name2"
+    ],
+    CPU_PRIORITY: [
+        "exe_name3",
+        "exe_name4"
+    ],
+    IO_PRIORITY: [
+        "exe_name5"
+    ]
+}
+```
+
+Where:
+
+- `CPU_PRIORITY` is a number between `-20` and `19`
+- `IO_PRIORITY` is one of:
+    - `Idle`
+    - `Standard`
+    - `BestEffort(PRIORITY_LEVEL)`
+    - `Realtime(PRIORITY_LEVEL)`
+- `PRIORITY_LEVEL` is a number between `0` and `7`
+
+
+A real world example below:
+
+```rs
+{
+    // Very high
+    (-9, BestEffort(7)): [
+        "easyeffects",
+    ],
+    // High priority
+    (-5, BestEffort(4)): [
+        "gnome-shell",
+        "kwin",
+        "Xorg"
+    ],
+    // Default
+    0: [ "dbus", "dbus-daemon", "systemd"],
+    // Absolute lowest priority
+    (19, Idle): [
+        "c++",
+        "cargo",
+        "clang",
+        "cpp",
+        "g++",
+        "gcc",
+        "lld",
+        "make",
+        "rustc",
+    ]
+}
 ```
 
 ## CPU Scheduler Latency Configurations
