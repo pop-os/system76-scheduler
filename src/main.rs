@@ -16,6 +16,7 @@ use crate::config::{cpu::Config as CpuConfig, Config};
 use crate::paths::SchedPaths;
 use crate::priority::{is_assignable, Priority};
 use argh::FromArgs;
+use config::IoPriority;
 use dbus::{CpuMode, Server};
 use std::{collections::HashMap, path::Path, time::Duration};
 use tokio::sync::mpsc::Sender;
@@ -161,7 +162,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
             return automatic_assignments
                 .get(exe)
                 .map_or(Priority::Assignable, |v| {
-                    Priority::Config(i32::from(v.0.get()))
+                    Priority::Config((v.0.get().into(), v.1))
                 });
         }
 
@@ -194,7 +195,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
                     }
 
                     if let Some(priority) = assigned_priority(pid)
-                        .with_default(i32::from(config.background.unwrap_or(0)))
+                        .with_default((i32::from(config.background.unwrap_or(0)), IoPriority::Idle))
                     {
                         crate::nice::set_priority(pid, priority);
                     }
@@ -212,8 +213,11 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
             Event::SetForegroundProcess(pid) => {
                 if let Some(foreground_priority) = config.foreground {
                     foreground_process = Some(pid);
-                    let background_priority = i32::from(config.background.unwrap_or(0));
-                    let foreground_priority = i32::from(foreground_priority);
+                    let background_priority =
+                        (i32::from(config.background.unwrap_or(0)), IoPriority::Idle);
+
+                    let foreground_priority =
+                        (i32::from(foreground_priority), IoPriority::Standard);
 
                     for process in fg_processes.drain(..) {
                         if let Some(priority) =

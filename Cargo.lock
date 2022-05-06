@@ -419,6 +419,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ioprio"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aed03c9a950f47958e5c6c4f974cf1b609aee1857ecc34bf68166dc6af782efc"
+dependencies = [
+ "libc",
+ "nix 0.21.2",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -477,6 +487,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "nix"
+version = "0.21.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77d9f3521ea8e0641a153b3cddaf008dcbf26acd4ed739a2517295e0760d12c7"
+dependencies = [
+ "bitflags",
+ "cc",
+ "cfg-if",
+ "libc",
+ "memoffset",
 ]
 
 [[package]]
@@ -838,6 +861,7 @@ dependencies = [
  "concat-in-place",
  "fomat-macros",
  "futures",
+ "ioprio",
  "itoa",
  "libc",
  "num_cpus",
@@ -1091,7 +1115,7 @@ dependencies = [
  "futures-util",
  "hex",
  "lazy_static",
- "nix",
+ "nix 0.23.1",
  "once_cell",
  "ordered-stream",
  "rand 0.8.5",

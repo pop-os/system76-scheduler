@@ -21,6 +21,24 @@ pub enum IoPriority {
     Realtime(PriorityLevel),
 }
 
+impl From<IoPriority> for ioprio::Priority {
+    fn from(priority: IoPriority) -> ioprio::Priority {
+        use ioprio::{BePriorityLevel, Class, Priority, RtPriorityLevel};
+        match priority {
+            IoPriority::BestEffort(value) => {
+                let level = BePriorityLevel::from_level(value.get()).unwrap();
+                Priority::new(Class::BestEffort(level))
+            }
+            IoPriority::Idle => Priority::new(Class::Idle),
+            IoPriority::Realtime(value) => {
+                let level = RtPriorityLevel::from_level(value.get()).unwrap();
+                Priority::new(Class::Realtime(level))
+            }
+            IoPriority::Standard => Priority::standard(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(from = "AssignmentRaw")]
 pub struct Assignment(pub CpuPriority, pub IoPriority);

@@ -1,22 +1,24 @@
 // Copyright 2022 System76 <info@system76.com>
 // SPDX-License-Identifier: MPL-2.0
 
-#[derive(Copy, Clone)]
+use crate::config::IoPriority;
+
+#[derive(Copy, Clone, Debug)]
 pub enum Priority {
     Assignable,
-    Config(i32),
+    Config((i32, IoPriority)),
     NotAssignable,
 }
 
 impl Priority {
-    pub fn with_default(self, priority: i32) -> Option<i32> {
-        let priority = match self {
+    pub fn with_default(self, priority: (i32, IoPriority)) -> Option<(i32, ioprio::Priority)> {
+        let (cpu, io) = match self {
             Priority::Assignable => priority,
             Priority::Config(config) => config,
             Priority::NotAssignable => return None,
         };
 
-        Some(priority)
+        Some((cpu, io.into()))
     }
 }
 
