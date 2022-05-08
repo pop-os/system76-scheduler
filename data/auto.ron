@@ -16,6 +16,7 @@
     "vrcompositor",
     "vrdashboard",
     "vrmonitor",
+    "vrserver",
     "Xorg",
 ],
 // Default
