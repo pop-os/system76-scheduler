@@ -16,6 +16,7 @@ use crate::config::{cpu::Config as CpuConfig, Config};
 use crate::paths::SchedPaths;
 use crate::priority::{is_assignable, Priority};
 use argh::FromArgs;
+use compact_str::CompactStr;
 use config::IoPriority;
 use dbus::{CpuMode, Server};
 use std::{collections::HashMap, path::Path, time::Duration};
@@ -150,20 +151,24 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
     let config = Config::read();
     let automatic_assignments = Config::automatic_assignments();
 
-    let mut exe_buf = String::with_capacity(64);
-
     // Gets the config-assigned priority of a process.
-    let mut assigned_priority = |pid: u32| -> Priority {
+    let assigned_priority = |pid: u32| -> Priority {
         if !is_assignable(pid) {
             return Priority::NotAssignable;
         }
 
-        if let Some(exe) = exe_of_pid(&mut exe_buf, pid) {
-            return automatic_assignments
-                .get(exe)
-                .map_or(Priority::Assignable, |v| {
-                    Priority::Config((v.0.get().into(), v.1))
-                });
+        if let Some(exe) = exe_of_pid(pid) {
+            if let Some(v) = automatic_assignments.get(&*exe) {
+                return Priority::Config((v.0.get().into(), v.1));
+            }
+
+            if let Some(name) = name_of_pid(pid) {
+                if let Some(v) = automatic_assignments.get(&*name) {
+                    return Priority::Config((v.0.get().into(), v.1));
+                }
+            }
+
+            return Priority::Assignable;
         }
 
         Priority::NotAssignable
@@ -364,17 +369,29 @@ async fn process_monitor(tx: Sender<Event>) {
     }
 }
 
-fn exe_of_pid(buf: &mut String, pid: u32) -> Option<&str> {
+fn exe_of_pid(pid: u32) -> Option<CompactStr> {
     let mut itoa = itoa::Buffer::new();
     let exe = concat_in_place::strcat!("/proc/" itoa.format(pid) "/exe");
-    let exe_path = Path::new(&exe);
 
-    if let Ok(exe) = std::fs::read_link(exe_path) {
+    if let Ok(exe) = std::fs::read_link(Path::new(&exe)) {
         if let Some(exe) = exe.file_name().and_then(std::ffi::OsStr::to_str) {
             if let Some(exe) = exe.split_ascii_whitespace().next() {
-                buf.clear();
-                buf.push_str(exe);
-                return Some(&*buf);
+                return Some(CompactStr::from(exe));
+            }
+        }
+    }
+
+    None
+}
+
+fn name_of_pid(pid: u32) -> Option<CompactStr> {
+    let mut itoa = itoa::Buffer::new();
+    let path = concat_in_place::strcat!("/proc/" itoa.format(pid) "/status");
+
+    if let Ok(buffer) = std::fs::read_to_string(&path) {
+        if let Some(name) = buffer.lines().next() {
+            if let Some(name) = name.strip_prefix("Name:") {
+                return Some(CompactStr::from(name.trim()));
             }
         }
     }
