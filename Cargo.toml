@@ -24,6 +24,7 @@ concat-in-place = "1.1.0"
 itoa = "1.0.1"
 fomat-macros = "0.3.1"
 ioprio = "0.2.0"
+compact_str = "0.3.2"
 
 # Necessary for deserialization of untagged enums in assignments.
 [dependencies.ron]
