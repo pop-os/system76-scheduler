@@ -189,19 +189,22 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
             Event::UpdateProcessMap(map, background_processes) => {
                 process_map = map;
 
-                for pid in background_processes {
-                    if fg_processes.contains(&pid) {
-                        continue;
-                    }
+                // Assign background priority to all processes.
+                if let Some(background) = config.background {
+                    for pid in background_processes {
+                        if fg_processes.contains(&pid) {
+                            continue;
+                        }
 
-                    if let Some(priority) = assigned_priority(pid)
-                        .with_default((i32::from(config.background.unwrap_or(0)), IoPriority::Idle))
-                    {
-                        crate::nice::set_priority(pid, priority);
+                        if let Some(priority) = assigned_priority(pid)
+                            .with_default((i32::from(background), IoPriority::Idle))
+                        {
+                            crate::nice::set_priority(pid, priority);
+                        }
                     }
                 }
 
-                // Reassign foreground processes.
+                // Reassign foreground processes in case they were overriden.
                 if let Some(process) = foreground_process.take() {
                     let tx = tx.clone();
                     tokio::spawn(async move {
@@ -219,6 +222,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
                     let foreground_priority =
                         (i32::from(foreground_priority), IoPriority::Standard);
 
+                    // Unset priorities of previously-set processes.
                     for process in fg_processes.drain(..) {
                         if let Some(priority) =
                             assigned_priority(process).with_default(background_priority)
