@@ -13,6 +13,10 @@
     "kwin",
     "sway",
     "steam",
+    "vrcompositor",
+    "vrdashboard",
+    "vrmonitor",
+    "vrserver",
     "Xorg",
 ],
 // Default
