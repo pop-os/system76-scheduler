@@ -87,6 +87,7 @@
     "dpkg",
     "FAHClient",
     "FAHCoreWrapper",
+    "fossilize_replay",
     "c++",
     "cargo",
     "clang",
