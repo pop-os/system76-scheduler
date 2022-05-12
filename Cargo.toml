@@ -1,2 +1,2 @@
 [workspace]
-members = ["daemon"]
+members = ["daemon", "execsnoop"]
