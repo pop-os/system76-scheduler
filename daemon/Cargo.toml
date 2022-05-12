@@ -5,6 +5,7 @@ repository = "https://github.com/pop-os/system76-scheduler"
 version = "1.2.0"
 edition = "2018"
 license = "MPL-2.0"
+publish = false
 
 [dependencies]
 anyhow = "1.0.57"
@@ -25,6 +26,7 @@ itoa = "1.0.1"
 fomat-macros = "0.3.1"
 ioprio = "0.2.0"
 compact_str = "0.3.2"
+execsnoop = { path = "../execsnoop" }
 
 # Necessary for deserialization of untagged enums in assignments.
 [dependencies.ron]
