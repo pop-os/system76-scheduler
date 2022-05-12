@@ -54,6 +54,7 @@ struct DaemonArgs {}
 
 #[derive(Debug)]
 enum Event {
+    ExecCreate(execsnoop::Process),
     OnBattery(bool),
     SetCpuMode,
     SetCustomCpuMode,
@@ -129,6 +130,19 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
     // Spawns a process monitor that updates process map info.
     tokio::spawn(process_monitor(tx.clone()));
 
+    // Use execsnoop-bpfcc to watch for new processes being created.
+    if let Ok(watcher) = execsnoop::watch() {
+        let handle = tokio::runtime::Handle::current();
+        let tx = tx.clone();
+        std::thread::spawn(move || {
+            handle.block_on(async move {
+                for process in watcher {
+                    let _res = tx.send(Event::ExecCreate(process)).await;
+                }
+            });
+        });
+    }
+
     let apply_config = |on_battery: bool| {
         cpu::tweak(
             &paths,
@@ -191,6 +205,34 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
         let interface = iface_handle.get().await;
 
         match event {
+            Event::ExecCreate(execsnoop::Process {
+                parent_pid, pid, ..
+            }) => {
+                if let Some(foreground) = config.foreground {
+                    if fg_processes.contains(&parent_pid) && !fg_processes.contains(&pid) {
+                        let default = (i32::from(foreground), IoPriority::Standard);
+
+                        if let Some(priority) = assigned_priority(pid).with_default(default) {
+                            crate::nice::set_priority(pid, priority);
+                            fg_processes.push(pid);
+                            continue;
+                        }
+                    }
+                }
+
+                if let Some(background) = config.background {
+                    if fg_processes.contains(&pid) {
+                        continue;
+                    }
+
+                    if let Some(priority) = assigned_priority(pid)
+                        .with_default((i32::from(background), IoPriority::Idle))
+                    {
+                        crate::nice::set_priority(pid, priority);
+                    }
+                }
+            }
+
             Event::UpdateProcessMap(map, background_processes) => {
                 process_map = map;
 
