@@ -12,5 +12,6 @@ Homepage: https://github.com/pop-os/system76-scheduler
 Package: system76-scheduler
 Architecture: amd64 arm64
 Depends: ${misc:Depends}, ${shlibs:Depends}
+Recommends: bpfcc-tools
 Description: Oneshot service to tweak the CFS scheduler on boot
  Uses settings from the Zen kernel by default.
