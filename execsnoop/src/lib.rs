@@ -21,48 +21,51 @@ pub struct Process {
 ///
 /// Requires the `execsnoop-bpfcc` binary from `bpfcc-tools`
 pub fn watch() -> io::Result<impl Iterator<Item = Process>> {
-    Command::new("execsnoop-bpfcc")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .stdin(Stdio::null())
-        .spawn()
-        .and_then(|mut child| {
-            let stdout = child.stdout.take().ok_or_else(|| {
-                io::Error::new(io::ErrorKind::Other, "execsnoop-bpfcc lacks stdout pipe")
-            })?;
+    Command::new(std::env!(
+        "EXECSNOOP_PATH",
+        "must set EXECSNOOP_PATH env to execsnoop-bpfcc path"
+    ))
+    .stdout(Stdio::piped())
+    .stderr(Stdio::null())
+    .stdin(Stdio::null())
+    .spawn()
+    .and_then(|mut child| {
+        let stdout = child.stdout.take().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::Other, "execsnoop-bpfcc lacks stdout pipe")
+        })?;
 
-            let mut reader = BufReader::new(stdout);
+        let mut reader = BufReader::new(stdout);
 
-            let mut line = String::with_capacity(128);
+        let mut line = String::with_capacity(128);
 
-            Ok(std::iter::from_fn(move || {
-                while reader.read_line(&mut line).is_ok() {
-                    let mut fields = line.split_ascii_whitespace();
+        Ok(std::iter::from_fn(move || {
+            while reader.read_line(&mut line).is_ok() {
+                let mut fields = line.split_ascii_whitespace();
 
-                    let command = fields.next();
-                    let pid = fields.next();
-                    let parent_pid = fields.next();
+                let command = fields.next();
+                let pid = fields.next();
+                let parent_pid = fields.next();
 
-                    if let Some(((command, pid), parent_pid)) = command.zip(pid).zip(parent_pid) {
-                        let pid = pid.parse::<u32>().ok();
-                        let parent_pid = parent_pid.parse::<u32>().ok();
+                if let Some(((command, pid), parent_pid)) = command.zip(pid).zip(parent_pid) {
+                    let pid = pid.parse::<u32>().ok();
+                    let parent_pid = parent_pid.parse::<u32>().ok();
 
-                        if let Some((pid, parent_pid)) = pid.zip(parent_pid) {
-                            let process = Process {
-                                comm: CompactStr::new(command),
-                                pid,
-                                parent_pid,
-                            };
+                    if let Some((pid, parent_pid)) = pid.zip(parent_pid) {
+                        let process = Process {
+                            comm: CompactStr::new(command),
+                            pid,
+                            parent_pid,
+                        };
 
-                            line.clear();
-                            return Some(process);
-                        }
+                        line.clear();
+                        return Some(process);
                     }
-
-                    line.clear();
                 }
 
-                None
-            }))
-        })
+                line.clear();
+            }
+
+            None
+        }))
+    })
 }
