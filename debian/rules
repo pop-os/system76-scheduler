@@ -1,5 +1,6 @@
 #!/usr/bin/make -f
 
+export DESTDIR = debian/system76-scheduler
 export EXECSNOOP_PATH ?= /usr/sbin/execsnoop-bpfcc
 export sysconfdir = "/usr/share"
 export VENDOR ?= 1
@@ -9,15 +10,23 @@ CLEAN ?= 1
 	dh $@ --with=systemd
 
 override_dh_auto_clean:
-ifeq ($(CLEAN),1)
-	ischroot && make clean || make distclean
-endif
-ifeq ($(VENDOR),1)
-	ischroot || make vendor
-endif
+	if test "${CLEAN}" = "1"; then \
+	        cargo clean; \
+	fi
+
+	if ! ischroot && test "${VENDOR}" = "1"; then \
+	        mkdir -p .cargo; \
+	        cargo vendor --sync gtk/Cargo.toml | head -n -1 > .cargo/config; \
+	        echo 'directory = "vendor"' >> .cargo/config; \
+	        tar pcf vendor.tar vendor; \
+	        rm -rf vendor; \
+	fi
 
 override_dh_auto_build:
-	CARGO_HOME="$$(pwd)/target/cargo" make
+	just rootdir=$(DESTDIR) debug=$(DEBUG) vendor=$(VENDOR)
+
+override_dh_auto_install:
+	just rootdir=$(DESTDIR) sysconfdir="/usr/share" install
 
 override_dh_installinit:
 	dh_installinit -r
