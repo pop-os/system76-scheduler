@@ -1,0 +1,8 @@
+// WARNING: Modifications to this file will not be preserved on upgrade.
+// To configure, make new .ron files under /etc/system76-scheduler/exceptions/.
+
+[
+    "pipewire",
+    "pipewire-pulse",
+    "wireplumber"
+]

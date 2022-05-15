@@ -1,17 +1,20 @@
 // Copyright 2021-2022 System76 <info@system76.com>
 // SPDX-License-Identifier: MPL-2.0
 
+use compact_str::CompactStr;
 use concat_in_place::strcat;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsStr;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-const DISTRIBUTION_PATH: &str = "/usr/share/";
-const SYSTEM_CONF_PATH: &str = "/etc/";
+const DISTRIBUTION_PATH: &str = "/usr/share/system76-scheduler/";
+const SYSTEM_CONF_PATH: &str = "/etc/system76-scheduler/";
 
-const CONFIG_PATH: &str = "system76-scheduler/config.ron";
+pub type Exceptions = BTreeSet<CompactStr>;
+pub type Assignments = BTreeMap<CompactStr, Assignment>;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum IoPriority {
@@ -97,15 +100,18 @@ impl From<u8> for PriorityLevel {
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct Config {
+    #[serde(default)]
     pub background: Option<i8>,
+
+    #[serde(default)]
     pub foreground: Option<i8>,
 }
 
 impl Config {
     pub fn read() -> Config {
         let directories = [
-            strcat!(SYSTEM_CONF_PATH CONFIG_PATH),
-            strcat!(DISTRIBUTION_PATH CONFIG_PATH),
+            strcat!(SYSTEM_CONF_PATH "config.ron"),
+            strcat!(DISTRIBUTION_PATH "config.ron"),
         ];
 
         let mut buffer = String::with_capacity(4096);
@@ -135,54 +141,110 @@ impl Config {
         }
     }
 
-    pub fn automatic_assignments() -> BTreeMap<String, Assignment> {
-        let mut assignments = BTreeMap::<String, Assignment>::new();
+    pub fn assignments() -> (Exceptions, Assignments) {
+        let exceptions = exceptions();
+        let assignments = assignments(&exceptions);
+        (exceptions, assignments)
+    }
+}
 
-        let directories = [
-            Path::new("/usr/share/system76-scheduler/assignments/"),
-            Path::new("/etc/system76-scheduler/assignments/"),
-        ];
+/// Process names that should have assignments ignored.
+#[allow(clippy::doc_markdown)]
+fn exceptions() -> Exceptions {
+    let paths = [
+        Path::new(concatcp!(DISTRIBUTION_PATH, "exceptions/")),
+        Path::new(concatcp!(SYSTEM_CONF_PATH, "exceptions/")),
+    ];
 
-        for directory in directories {
-            if let Ok(dir) = directory.read_dir() {
-                for entry in dir.filter_map(Result::ok) {
-                    let path = entry.path();
-                    if let Ok(string) = fs::read_to_string(&path) {
-                        match ron::from_str::<BTreeMap<Assignment, HashSet<String>>>(&string) {
-                            Ok(buffer) => {
-                                if tracing::event_enabled!(tracing::Level::INFO) {
-                                    let log = fomat_macros::fomat!(
-                                        (path.display()) ":\n"
-                                        for value in &buffer {
-                                            "\t" [value] "\n"
-                                        }
-                                    );
+    mk_gen!(let generator = configuration_files(&paths));
 
-                                    tracing::info!("{}", log);
-                                }
+    let mut exceptions = BTreeSet::new();
 
-                                for (priority, commands) in buffer {
-                                    for command in commands {
-                                        assignments.insert(command, priority);
-                                    }
-                                }
+    for path in generator {
+        if let Ok(string) = fs::read_to_string(&path) {
+            match ron::from_str::<Exceptions>(&string) {
+                Ok(rules) => {
+                    exceptions.extend(rules.into_iter());
+                }
+
+                Err(why) => {
+                    tracing::error!(
+                        "{:?}: {} on line {}, column {}",
+                        path,
+                        why.code,
+                        why.position.line,
+                        why.position.col
+                    );
+                }
+            }
+        }
+    }
+
+    exceptions
+}
+
+/// Stores process names and their preferred assignments.
+#[allow(clippy::doc_markdown)]
+fn assignments(exceptions: &Exceptions) -> Assignments {
+    let paths = [
+        Path::new(concatcp!(DISTRIBUTION_PATH, "assignments/")),
+        Path::new(concatcp!(SYSTEM_CONF_PATH, "assignments/")),
+    ];
+
+    mk_gen!(let generator = configuration_files(&paths));
+
+    let mut assignments = BTreeMap::<CompactStr, Assignment>::new();
+
+    for path in generator {
+        if let Ok(string) = fs::read_to_string(&path) {
+            match ron::from_str::<BTreeMap<Assignment, Exceptions>>(&string) {
+                Ok(buffer) => {
+                    if tracing::event_enabled!(tracing::Level::INFO) {
+                        let log = fomat_macros::fomat!(
+                            (path.display()) ":\n"
+                            for value in &buffer {
+                                "\t" [value] "\n"
                             }
-                            Err(why) => {
-                                tracing::error!(
-                                    "{:?}: {} on line {}, column {}",
-                                    entry.path(),
-                                    why.code,
-                                    why.position.line,
-                                    why.position.col
-                                );
+                        );
+
+                        tracing::info!("{}", log);
+                    }
+
+                    for (assignment, commands) in buffer {
+                        for command in commands {
+                            if !exceptions.contains(&command) {
+                                assignments.insert(command, assignment);
                             }
                         }
                     }
                 }
+                Err(why) => {
+                    tracing::error!(
+                        "{:?}: {} on line {}, column {}",
+                        path,
+                        why.code,
+                        why.position.line,
+                        why.position.col
+                    );
+                }
             }
         }
+    }
 
-        assignments
+    assignments
+}
+
+#[generator(yield(PathBuf))]
+fn configuration_files(paths: &[&Path]) {
+    for directory in paths {
+        if let Ok(dir) = directory.read_dir() {
+            for entry in dir.filter_map(Result::ok) {
+                let path = entry.path();
+                if path.extension() == Some(OsStr::new("ron")) {
+                    yield_!(path);
+                }
+            }
+        }
     }
 }
 
@@ -191,8 +253,6 @@ pub mod cpu {
     use std::{borrow::Cow, fs, path::Path};
 
     use super::{preempt_default, strcat, DISTRIBUTION_PATH, SYSTEM_CONF_PATH};
-
-    const PROFILES_PATH: &str = "system76-scheduler/cpu/";
 
     const DEFAULT_CONFIG: Config = Config {
         latency: 6,
@@ -227,14 +287,14 @@ pub mod cpu {
 
     impl Config {
         pub fn config_path(config: &str) -> Option<String> {
-            let mut path = strcat!(SYSTEM_CONF_PATH PROFILES_PATH config ".ron");
+            let mut path = strcat!(SYSTEM_CONF_PATH "cpu/" config ".ron");
 
             if Path::new(&path).exists() {
                 return Some(path);
             }
 
             path.clear();
-            strcat!(&mut path, DISTRIBUTION_PATH PROFILES_PATH config ".ron");
+            strcat!(&mut path, DISTRIBUTION_PATH "cpu/" config ".ron");
 
             if Path::new(&path).exists() {
                 return Some(path);

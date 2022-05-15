@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: MPL-2.0
 
 #[macro_use]
+extern crate const_format;
+#[macro_use]
+extern crate next_gen;
+#[macro_use]
 extern crate zbus;
 
 mod config;
@@ -17,7 +21,7 @@ use crate::paths::SchedPaths;
 use crate::priority::{is_assignable, Priority};
 use argh::FromArgs;
 use compact_str::CompactStr;
-use config::IoPriority;
+use config::{Assignment, IoPriority};
 use dbus::{CpuMode, Server};
 use std::{collections::HashMap, path::Path, time::Duration};
 use tokio::sync::mpsc::Sender;
@@ -163,7 +167,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
     let mut foreground_process = None;
 
     let config = Config::read();
-    let automatic_assignments = Config::automatic_assignments();
+    let (exceptions, assignments) = Config::assignments();
 
     // Gets the config-assigned priority of a process.
     let assigned_priority = |pid: u32| -> Priority {
@@ -171,14 +175,26 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
             return Priority::NotAssignable;
         }
 
+        let name = name_of_pid(pid);
+
+        if let Some(name) = &name {
+            if exceptions.contains(name) {
+                return Priority::NotAssignable;
+            }
+        }
+
         if let Some(exe) = exe_of_pid(pid) {
-            if let Some(v) = automatic_assignments.get(&*exe) {
-                return Priority::Config((v.0.get().into(), v.1));
+            if exceptions.contains(&*exe) {
+                return Priority::NotAssignable;
             }
 
-            if let Some(name) = name_of_pid(pid) {
-                if let Some(v) = automatic_assignments.get(&*name) {
-                    return Priority::Config((v.0.get().into(), v.1));
+            if let Some(Assignment(cpu, io)) = assignments.get(&*exe) {
+                return Priority::Config((cpu.get().into(), *io));
+            }
+
+            if let Some(name) = name {
+                if let Some(Assignment(cpu, io)) = assignments.get(&*name) {
+                    return Priority::Config((cpu.get().into(), *io));
                 }
             }
 
