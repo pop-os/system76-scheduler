@@ -33,9 +33,11 @@ distclean:
 
 # Install everything
 install:
-    mkdir -p {{confdir}}/system76-scheduler/assignments
+    mkdir -p {{confdir}}/system76-scheduler/assignments \
+        {{confdir}}/system76-scheduler/exceptions
     install -Dm0644 data/config.ron {{confdir}}/system76-scheduler/config.ron
-    install -Dm0644 data/auto.ron {{confdir}}/system76-scheduler/assignments/default.ron
+    install -Dm0644 data/assignments.ron {{confdir}}/system76-scheduler/assignments/default.ron
+    install -Dm0644 data/exceptions.ron {{confdir}}/system76-scheduler/exceptions/default.ron
     install -Dm04755 target/{{target}}/{{binary}} {{target_bin}}
     install -Dm0644 data/{{id}}.service {{libdir}}/systemd/system/{{id}}.service
     install -Dm0644 data/{{id}}.conf {{confdir}}/dbus-1/system.d/{{id}}.conf

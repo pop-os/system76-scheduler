@@ -11,7 +11,27 @@ These changes result in a noticeable improvement in the experienced smoothness a
 
 The `SetForeground(u32)` method can be called to change the active foreground process.
 
-## Process Priority Config
+## Scheduler Config
+
+The configuration file is stored at the following locations:
+
+- User-config: `/etc/system76-scheduler/config.ron`
+- Distribution: `/usr/share/system76-scheduler/config.ron`
+
+```rs
+{
+    // The priority to assign background tasks.
+    background: Some(5),
+
+    // The priority to assign foreground tasks.
+    foreground: Some(-5),
+}
+```
+
+- When `background` is set to `None`, background process priorities will not be assigned.
+- When `foreground` is set to `None`, foreground and background priorities will not be assigned.
+
+## Process Priority Assignments
 
 RON configuration files are stored at the following locations:
 
@@ -76,6 +96,23 @@ A real world example below:
         "rustc",
     ]
 }
+```
+
+## Process Priority Exceptions
+
+RON configuration files are stored at the following locations:
+
+- User-config: `/etc/system76-scheduler/exceptions/`
+- Distribution: `/usr/share/system76-scheduler/exceptions/`
+
+The files contain a list of process names that are prohibited from having priority adjustments.
+
+```rs
+([
+"pipewire",
+"pipewire-pulse",
+"wireplumber"
+])
 ```
 
 ## CPU Scheduler Latency Configurations
