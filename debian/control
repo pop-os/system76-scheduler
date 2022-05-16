@@ -5,6 +5,7 @@ Maintainer: Michael Murphy <mmstick@pm.me>
 Build-Depends:
     cargo,
     debhelper-compat (=10),
+    just,
     rustc (>=1.53),
 Standards-Version: 4.1.1
 Homepage: https://github.com/pop-os/system76-scheduler
