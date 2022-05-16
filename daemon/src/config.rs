@@ -37,7 +37,10 @@ impl From<IoPriority> for ioprio::Priority {
                 let level = RtPriorityLevel::from_level(value.get()).unwrap();
                 Priority::new(Class::Realtime(level))
             }
-            IoPriority::Standard => Priority::standard(),
+            IoPriority::Standard => {
+                let level = BePriorityLevel::from_level(7).unwrap();
+                Priority::new(Class::BestEffort(level))
+            }
         }
     }
 }
