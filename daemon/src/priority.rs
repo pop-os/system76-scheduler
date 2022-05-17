@@ -10,6 +10,7 @@ type ProcessMap = HashMap<u32, Option<u32>>;
 pub enum Priority {
     Assignable,
     Config((i32, IoPriority)),
+    Exception,
     NotAssignable,
 }
 
@@ -18,7 +19,7 @@ impl Priority {
         let (cpu, io) = match self {
             Priority::Assignable => priority,
             Priority::Config(config) => config,
-            Priority::NotAssignable => return None,
+            _ => return None,
         };
 
         Some((cpu, io.into()))
@@ -62,13 +63,13 @@ impl Service {
 
         if let Some(name) = &name {
             if self.exceptions.contains(name) {
-                return Priority::NotAssignable;
+                return Priority::Exception;
             }
         }
 
         if let Some(exe) = crate::utils::exe_of_pid(pid) {
             if self.exceptions.contains(&*exe) {
-                return Priority::NotAssignable;
+                return Priority::Exception;
             }
 
             if let Some(Assignment(cpu, io)) = self.assignments.get(&*exe) {
@@ -102,10 +103,24 @@ impl Service {
             }
         }
 
+        // Child processes inherit the priority of their parent.
+        // We want exceptions to avoid inheriting that priority.
+        if Priority::Exception == self.assigned_priority(pid) {
+            let parent_priority = priority(parent_pid);
+            let child_priority = priority(pid);
+
+            if parent_priority == child_priority {
+                let level = ioprio::BePriorityLevel::lowest();
+                let class = ioprio::Class::BestEffort(level);
+                let io_priority = ioprio::Priority::new(class);
+                crate::nice::set_priority(pid, (0, io_priority));
+            }
+
+            return;
+        }
+
         if let Some(background) = self.config.background {
-            if self.foreground_processes.contains(&pid)
-                || Priority::NotAssignable == self.assigned_priority(pid)
-            {
+            if self.foreground_processes.contains(&pid) {
                 return;
             }
 
