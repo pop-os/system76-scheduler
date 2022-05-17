@@ -143,17 +143,11 @@ impl Config {
             foreground: Some(-5),
         }
     }
-
-    pub fn assignments() -> (Exceptions, Assignments) {
-        let exceptions = exceptions();
-        let assignments = assignments(&exceptions);
-        (exceptions, assignments)
-    }
 }
 
 /// Process names that should have assignments ignored.
 #[allow(clippy::doc_markdown)]
-fn exceptions() -> Exceptions {
+pub fn exceptions() -> Exceptions {
     let paths = [
         Path::new(concatcp!(DISTRIBUTION_PATH, "exceptions/")),
         Path::new(concatcp!(SYSTEM_CONF_PATH, "exceptions/")),
@@ -188,7 +182,7 @@ fn exceptions() -> Exceptions {
 
 /// Stores process names and their preferred assignments.
 #[allow(clippy::doc_markdown)]
-fn assignments(exceptions: &Exceptions) -> Assignments {
+pub fn assignments(exceptions: &Exceptions) -> Assignments {
     let paths = [
         Path::new(concatcp!(DISTRIBUTION_PATH, "assignments/")),
         Path::new(concatcp!(SYSTEM_CONF_PATH, "assignments/")),
