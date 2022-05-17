@@ -16,12 +16,9 @@ mod paths;
 mod priority;
 mod utils;
 
-use crate::config::{cpu::Config as CpuConfig, Config};
+use crate::config::cpu::Config as CpuConfig;
 use crate::paths::SchedPaths;
-use crate::priority::{is_assignable, Priority};
 use argh::FromArgs;
-use compact_str::CompactStr;
-use config::{Assignment, IoPriority};
 use dbus::{CpuMode, Server};
 use std::{collections::HashMap, path::Path, time::Duration};
 use tokio::sync::mpsc::Sender;
@@ -162,47 +159,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
 
     apply_config(upower_proxy.on_battery().await.unwrap_or(false));
 
-    let mut fg_processes: Vec<u32> = Vec::with_capacity(256);
-    let mut process_map = HashMap::new();
-    let mut foreground_process = None;
-
-    let config = Config::read();
-    let (exceptions, assignments) = Config::assignments();
-
-    // Gets the config-assigned priority of a process.
-    let assigned_priority = |pid: u32| -> Priority {
-        if !is_assignable(pid) {
-            return Priority::NotAssignable;
-        }
-
-        let name = name_of_pid(pid);
-
-        if let Some(name) = &name {
-            if exceptions.contains(name) {
-                return Priority::NotAssignable;
-            }
-        }
-
-        if let Some(exe) = exe_of_pid(pid) {
-            if exceptions.contains(&*exe) {
-                return Priority::NotAssignable;
-            }
-
-            if let Some(Assignment(cpu, io)) = assignments.get(&*exe) {
-                return Priority::Config((cpu.get().into(), *io));
-            }
-
-            if let Some(name) = name {
-                if let Some(Assignment(cpu, io)) = assignments.get(&*name) {
-                    return Priority::Config((cpu.get().into(), *io));
-                }
-            }
-
-            return Priority::Assignable;
-        }
-
-        Priority::NotAssignable
-    };
+    let mut priority_service = priority::Service::default();
 
     while let Some(event) = rx.recv().await {
         let interface_result = connection
@@ -224,100 +181,15 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
             Event::ExecCreate(execsnoop::Process {
                 parent_pid, pid, ..
             }) => {
-                if let Some(foreground) = config.foreground {
-                    if fg_processes.contains(&parent_pid) && !fg_processes.contains(&pid) {
-                        let default = (i32::from(foreground), IoPriority::Standard);
-
-                        if let Some(priority) = assigned_priority(pid).with_default(default) {
-                            crate::nice::set_priority(pid, priority);
-                            fg_processes.push(pid);
-                            continue;
-                        }
-                    }
-                }
-
-                if let Some(background) = config.background {
-                    if fg_processes.contains(&pid) {
-                        continue;
-                    }
-
-                    if let Some(priority) = assigned_priority(pid)
-                        .with_default((i32::from(background), IoPriority::Idle))
-                    {
-                        crate::nice::set_priority(pid, priority);
-                    }
-                }
+                priority_service.assign_new_process(pid, parent_pid);
             }
 
             Event::UpdateProcessMap(map, background_processes) => {
-                process_map = map;
-
-                // Assign background priority to all processes.
-                if let Some(background) = config.background {
-                    for pid in background_processes {
-                        if fg_processes.contains(&pid) {
-                            continue;
-                        }
-
-                        if let Some(priority) = assigned_priority(pid)
-                            .with_default((i32::from(background), IoPriority::Idle))
-                        {
-                            crate::nice::set_priority(pid, priority);
-                        }
-                    }
-                }
-
-                // Reassign foreground processes in case they were overriden.
-                if let Some(process) = foreground_process.take() {
-                    let tx = tx.clone();
-                    tokio::spawn(async move {
-                        let _res = tx.send(Event::SetForegroundProcess(process)).await;
-                    });
-                }
+                priority_service.update_process_map(map, background_processes);
             }
 
             Event::SetForegroundProcess(pid) => {
-                if let Some(foreground_priority) = config.foreground {
-                    foreground_process = Some(pid);
-                    let background_priority =
-                        (i32::from(config.background.unwrap_or(0)), IoPriority::Idle);
-
-                    let foreground_priority =
-                        (i32::from(foreground_priority), IoPriority::Standard);
-
-                    // Unset priorities of previously-set processes.
-                    for process in fg_processes.drain(..) {
-                        if let Some(priority) =
-                            assigned_priority(process).with_default(background_priority)
-                        {
-                            crate::nice::set_priority(process, priority);
-                        }
-                    }
-
-                    if let Some(priority) = assigned_priority(pid).with_default(foreground_priority)
-                    {
-                        crate::nice::set_priority(pid, priority);
-                        fg_processes.push(pid);
-                    }
-
-                    'outer: loop {
-                        for (pid, parent) in &process_map {
-                            if let Some(parent) = parent {
-                                if fg_processes.contains(parent) && !fg_processes.contains(pid) {
-                                    if let Some(priority) =
-                                        assigned_priority(*pid).with_default(foreground_priority)
-                                    {
-                                        crate::nice::set_priority(*pid, priority);
-                                        fg_processes.push(*pid);
-                                        continue 'outer;
-                                    }
-                                }
-                            }
-                        }
-
-                        break;
-                    }
-                }
+                priority_service.set_foreground_process(pid);
             }
 
             Event::OnBattery(on_battery) => {
@@ -425,34 +297,4 @@ async fn process_monitor(tx: Sender<Event>) {
 
         tokio::time::sleep(Duration::from_secs(60)).await;
     }
-}
-
-fn exe_of_pid(pid: u32) -> Option<CompactStr> {
-    let mut itoa = itoa::Buffer::new();
-    let exe = concat_in_place::strcat!("/proc/" itoa.format(pid) "/exe");
-
-    if let Ok(exe) = std::fs::read_link(Path::new(&exe)) {
-        if let Some(exe) = exe.file_name().and_then(std::ffi::OsStr::to_str) {
-            if let Some(exe) = exe.split_ascii_whitespace().next() {
-                return Some(CompactStr::from(exe));
-            }
-        }
-    }
-
-    None
-}
-
-fn name_of_pid(pid: u32) -> Option<CompactStr> {
-    let mut itoa = itoa::Buffer::new();
-    let path = concat_in_place::strcat!("/proc/" itoa.format(pid) "/status");
-
-    if let Ok(buffer) = std::fs::read_to_string(&path) {
-        if let Some(name) = buffer.lines().next() {
-            if let Some(name) = name.strip_prefix("Name:") {
-                return Some(CompactStr::from(name.trim()));
-            }
-        }
-    }
-
-    None
 }
