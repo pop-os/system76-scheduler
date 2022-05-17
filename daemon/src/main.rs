@@ -18,40 +18,12 @@ mod utils;
 
 use crate::config::cpu::Config as CpuConfig;
 use crate::paths::SchedPaths;
-use argh::FromArgs;
+use clap::ArgMatches;
 use dbus::{CpuMode, Server};
 use std::{collections::HashMap, path::Path, time::Duration};
 use tokio::sync::mpsc::Sender;
 use upower_dbus::UPowerProxy;
 use zbus::{Connection, PropertyStream};
-
-#[derive(FromArgs, PartialEq, Debug)]
-/// System76 Scheduler Tweaker
-struct Args {
-    #[argh(subcommand)]
-    subcmd: SubCmd,
-}
-
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand)]
-enum SubCmd {
-    Cpu(CpuArgs),
-    Daemon(DaemonArgs),
-}
-
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "cpu")]
-/// Change the CPU scheduler configuration.
-struct CpuArgs {
-    #[argh(positional)]
-    profile: Option<String>,
-}
-
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "daemon")]
-#[allow(clippy::doc_markdown)]
-/// Launch the DBus service.
-struct DaemonArgs {}
 
 #[derive(Debug)]
 enum Event {
@@ -78,18 +50,29 @@ async fn main() -> anyhow::Result<()> {
 
     let connection = Connection::system().await?;
 
-    let args: Args = argh::from_env();
+    let matches = clap::command!()
+        .propagate_version(true)
+        .subcommand_required(true)
+        .arg_required_else_help(true)
+        .subcommand(
+            clap::Command::new("cpu")
+                .about("select a CFS scheduler profile")
+                .arg(clap::arg!([PROFILE])),
+        )
+        .subcommand(clap::Command::new("daemon").about("launch the system daemon"))
+        .get_matches();
 
-    match args.subcmd {
-        SubCmd::Cpu(args) => cpu(connection, args).await,
-        SubCmd::Daemon(_) => daemon(connection).await,
+    match matches.subcommand() {
+        Some(("cpu", cpu_matches)) => cpu(connection, cpu_matches).await,
+        Some(("daemon", _)) => daemon(connection).await,
+        _ => Ok(()),
     }
 }
 
-async fn cpu(connection: Connection, args: CpuArgs) -> anyhow::Result<()> {
+async fn cpu(connection: Connection, args: &ArgMatches) -> anyhow::Result<()> {
     let mut connection = dbus::ClientProxy::new(&connection).await?;
 
-    match args.profile.as_ref() {
+    match args.value_of("PROFILE").as_ref() {
         Some(profile) => {
             connection.set_cpu_profile(profile).await?;
         }
