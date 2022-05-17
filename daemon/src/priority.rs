@@ -30,6 +30,7 @@ pub enum AssignmentStatus {
     Unset,
 }
 
+#[derive(Default)]
 pub struct Service {
     pub assignments: Assignments,
     pub config: Config,
@@ -113,6 +114,13 @@ impl Service {
         }
     }
 
+    /// Reloads the configuration files.
+    pub fn reload_configuration(&mut self) {
+        self.config = Config::read();
+        self.exceptions = crate::config::exceptions();
+        self.assignments = crate::config::assignments(&self.exceptions);
+    }
+
     /// Sets a process as the foreground.
     pub fn set_foreground_process(&mut self, pid: u32) {
         if let Some(foreground_priority) = self.config.foreground {
@@ -194,22 +202,6 @@ impl Service {
         // Reassign foreground processes in case they were overriden.
         if let Some(process) = self.foreground.take() {
             self.set_foreground_process(process);
-        }
-    }
-}
-
-impl Default for Service {
-    fn default() -> Self {
-        let exceptions = crate::config::exceptions();
-        let assignments = crate::config::assignments(&exceptions);
-
-        Self {
-            assignments,
-            config: Config::read(),
-            exceptions,
-            foreground: None,
-            foreground_processes: Vec::with_capacity(256),
-            process_map: HashMap::new(),
         }
     }
 }

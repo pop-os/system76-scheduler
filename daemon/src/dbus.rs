@@ -45,12 +45,14 @@ pub trait Client {
     #[dbus_proxy(property)]
     fn cpu_profile(&self) -> zbus::fdo::Result<String>;
 
+    fn reload_configuration(&self) -> zbus::fdo::Result<()>;
+
     fn set_cpu_mode(&mut self, cpu_mode: CpuMode) -> zbus::fdo::Result<()>;
 
     fn set_cpu_profile(&mut self, profile: &str) -> zbus::fdo::Result<()>;
 
     /// This process will have its process group prioritized over background processes
-    async fn set_foreground_process(&mut self, pid: u32) -> zbus::fdo::Result<()>;
+    fn set_foreground_process(&mut self, pid: u32) -> zbus::fdo::Result<()>;
 }
 
 #[dbus_interface(name = "com.system76.Scheduler")]
@@ -63,6 +65,10 @@ impl Server {
     #[dbus_interface(property)]
     fn cpu_profile(&self) -> &str {
         &self.cpu_profile
+    }
+
+    async fn reload_configuration(&self) {
+        let _res = self.tx.send(Event::ReloadConfiguration).await;
     }
 
     async fn set_cpu_mode(&mut self, cpu_mode: CpuMode) {
