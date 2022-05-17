@@ -57,6 +57,7 @@ struct DaemonArgs {}
 enum Event {
     ExecCreate(execsnoop::Process),
     OnBattery(bool),
+    ReloadConfiguration,
     SetCpuMode,
     SetCustomCpuMode,
     SetForegroundProcess(u32),
@@ -160,6 +161,7 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
     apply_config(upower_proxy.on_battery().await.unwrap_or(false));
 
     let mut priority_service = priority::Service::default();
+    priority_service.reload_configuration();
 
     while let Some(event) = rx.recv().await {
         let interface_result = connection
@@ -222,6 +224,10 @@ async fn daemon(connection: Connection) -> anyhow::Result<()> {
                     tracing::debug!("applying {} config", interface.cpu_profile);
                     cpu::tweak(&paths, &config);
                 }
+            }
+
+            Event::ReloadConfiguration => {
+                priority_service.reload_configuration();
             }
         }
     }
