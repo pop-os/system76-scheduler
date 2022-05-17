@@ -59,14 +59,27 @@ async fn main() -> anyhow::Result<()> {
                 .about("select a CFS scheduler profile")
                 .arg(clap::arg!([PROFILE])),
         )
-        .subcommand(clap::Command::new("daemon").about("launch the system daemon"))
+        .subcommand(
+            clap::Command::new("daemon")
+                .about("launch the system daemon")
+                .subcommand(clap::Command::new("reload").about("reload system configuration")),
+        )
         .get_matches();
 
     match matches.subcommand() {
-        Some(("cpu", cpu_matches)) => cpu(connection, cpu_matches).await,
-        Some(("daemon", _)) => daemon(connection).await,
+        Some(("cpu", matches)) => cpu(connection, matches).await,
+        Some(("daemon", matches)) => daemon(connection, matches).await,
         _ => Ok(()),
     }
+}
+
+async fn reload(connection: Connection) -> anyhow::Result<()> {
+    dbus::ClientProxy::new(&connection)
+        .await?
+        .reload_configuration()
+        .await?;
+
+    Ok(())
 }
 
 async fn cpu(connection: Connection, args: &ArgMatches) -> anyhow::Result<()> {
@@ -85,7 +98,14 @@ async fn cpu(connection: Connection, args: &ArgMatches) -> anyhow::Result<()> {
 }
 
 #[allow(clippy::too_many_lines)]
-async fn daemon(connection: Connection) -> anyhow::Result<()> {
+async fn daemon(connection: Connection, args: &ArgMatches) -> anyhow::Result<()> {
+    match args.subcommand() {
+        Some(("reload", _)) => return reload(connection).await,
+        _ => (),
+    }
+
+    tracing::info!("starting daemon service");
+
     let paths = SchedPaths::new()?;
 
     let upower_proxy = UPowerProxy::new(&connection).await?;
