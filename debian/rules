@@ -6,6 +6,16 @@ export sysconfdir = "/usr/share"
 export VENDOR ?= 1
 CLEAN ?= 1
 
+# Bring in dpkg-buildflags managed flags, if present. (CFLAGS, etc.)
+#
+# Hint: Despite dpkg-buildflags complaining it doesn't support it,
+# it will actually handle RUSTFLAGS just fine.
+# For example, putting DEB_RUSTFLAGS_APPEND=, etc. in /etc/dpkg/buildflags.conf
+# works as you would expect it.
+ifneq("","$(wildcard /usr/share/dpkg/buildflags.mk)")
+  include /usr/share/dpkg/buildflags.mk
+fi
+
 %:
 	dh $@ --with=systemd
 
