@@ -3,6 +3,7 @@ Description=Automatically configure CPU scheduler for responsiveness on AC
 
 [Service]
 ExecStart=/usr/bin/system76-scheduler daemon
+ExecReload=/usr/bin/system76-scheduler daemon reload
 Type=dbus
 BusName=com.system76.Scheduler
 
