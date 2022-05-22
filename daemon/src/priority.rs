@@ -1,7 +1,7 @@
 // Copyright 2022 System76 <info@system76.com>
 // SPDX-License-Identifier: MPL-2.0
 
-use crate::config::{Assignment, Assignments, Config, Exceptions, IoPriority};
+use crate::config::{Assignment, Assignments, Config, CpuPriority, Exceptions, IoPriority};
 use std::collections::HashMap;
 
 type ProcessMap = HashMap<u32, Option<u32>>;
@@ -55,10 +55,6 @@ impl Service {
     /// Gets the config-assigned priority of a process.
     #[must_use]
     pub fn assigned_priority(&self, pid: u32) -> Priority {
-        if !is_assignable(pid) {
-            return Priority::NotAssignable;
-        }
-
         let name = crate::utils::name_of_pid(pid);
 
         if let Some(name) = &name {
@@ -73,11 +69,19 @@ impl Service {
             }
 
             if let Some(Assignment(cpu, io)) = self.assignments.get(&*exe) {
+                if !is_assignable(pid, *cpu) {
+                    return Priority::NotAssignable;
+                }
+
                 return Priority::Config((cpu.get().into(), *io));
             }
 
             if let Some(name) = name {
                 if let Some(Assignment(cpu, io)) = self.assignments.get(&*name) {
+                    if !is_assignable(pid, *cpu) {
+                        return Priority::NotAssignable;
+                    }
+
                     return Priority::Config((cpu.get().into(), *io));
                 }
             }
@@ -222,9 +226,9 @@ impl Service {
 }
 
 /// A process is assignable if its priority is less than 9 or greater than -9.
-pub fn is_assignable(pid: u32) -> bool {
+pub fn is_assignable(pid: u32, cpu: CpuPriority) -> bool {
     let current = priority(pid);
-    current <= 9 && current >= -9
+    (current <= 9 && current >= -9) || cpu.get() <= -9 || cpu.get() >= 9
 }
 
 /// Get the priority of a process.
