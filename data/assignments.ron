@@ -2,6 +2,12 @@
 // To configure, make new .ron files under /etc/system76-scheduler/assignments/.
 
 {
+// Prevent audio crackling from sound services.
+(-11, Realtime(0)): [
+    "pipewire",
+    "pipewire-pulse",
+    "wireplumber"
+],
 // Very high
 (-9, BestEffort(0)): [
     "easyeffects",
