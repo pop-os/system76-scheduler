@@ -2,7 +2,6 @@
 // To configure, make new .ron files under /etc/system76-scheduler/exceptions/.
 
 [
-    "pipewire",
-    "pipewire-pulse",
-    "wireplumber"
+    "ionice",
+    "nice",
 ]
