@@ -1,7 +1,6 @@
 // Copyright 2022 System76 <info@system76.com>
 // SPDX-License-Identifier: MPL-2.0
 
-use compact_str::CompactStr;
 use std::{
     io,
     io::{BufRead, BufReader},
@@ -10,7 +9,6 @@ use std::{
 
 #[derive(Clone, Debug)]
 pub struct Process {
-    pub comm: CompactStr,
     pub pid: u32,
     pub parent_pid: u32,
 }
@@ -42,20 +40,15 @@ pub fn watch() -> io::Result<impl Iterator<Item = Process>> {
             while reader.read_line(&mut line).is_ok() {
                 let mut fields = line.split_ascii_whitespace();
 
-                let command = fields.next();
-                let pid = fields.next();
+                let pid = fields.nth(1);
                 let parent_pid = fields.next();
 
-                if let Some(((command, pid), parent_pid)) = command.zip(pid).zip(parent_pid) {
+                if let Some((pid, parent_pid)) = pid.zip(parent_pid) {
                     let pid = pid.parse::<u32>().ok();
                     let parent_pid = parent_pid.parse::<u32>().ok();
 
                     if let Some((pid, parent_pid)) = pid.zip(parent_pid) {
-                        let process = Process {
-                            comm: CompactStr::new(command),
-                            pid,
-                            parent_pid,
-                        };
+                        let process = Process { pid, parent_pid };
 
                         line.clear();
                         return Some(process);
