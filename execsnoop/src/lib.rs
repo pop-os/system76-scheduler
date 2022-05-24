@@ -36,29 +36,30 @@ pub fn watch() -> io::Result<impl Iterator<Item = Process>> {
 
         let mut line = String::with_capacity(128);
 
-        Ok(std::iter::from_fn(move || {
-            while reader.read_line(&mut line).is_ok() {
-                let mut fields = line.split_ascii_whitespace();
-
-                let pid = fields.nth(1);
-                let parent_pid = fields.next();
-
-                if let Some((pid, parent_pid)) = pid.zip(parent_pid) {
-                    let pid = pid.parse::<u32>().ok();
-                    let parent_pid = parent_pid.parse::<u32>().ok();
-
-                    if let Some((pid, parent_pid)) = pid.zip(parent_pid) {
-                        let process = Process { pid, parent_pid };
-
-                        line.clear();
-                        return Some(process);
-                    }
-                }
-
-                line.clear();
+        Ok(std::iter::from_fn(move || loop {
+            match reader.read_line(&mut line) {
+                Err(_) | Ok(0) => return None,
+                _ => (),
             }
 
-            None
+            let mut fields = line.split_ascii_whitespace();
+
+            let pid = fields.nth(1);
+            let parent_pid = fields.next();
+
+            if let Some((pid, parent_pid)) = pid.zip(parent_pid) {
+                let pid = pid.parse::<u32>().ok();
+                let parent_pid = parent_pid.parse::<u32>().ok();
+
+                if let Some((pid, parent_pid)) = pid.zip(parent_pid) {
+                    let process = Process { pid, parent_pid };
+
+                    line.clear();
+                    return Some(process);
+                }
+            }
+
+            line.clear();
         }))
     })
 }
