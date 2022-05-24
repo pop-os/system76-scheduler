@@ -4,7 +4,7 @@
 use std::{
     io,
     io::{BufRead, BufReader},
-    process::{Command, Stdio}, iter::FromFn,
+    process::{Command, Stdio},
 };
 
 #[derive(Clone, Debug)]
@@ -15,7 +15,7 @@ pub struct Process {
 
 pub struct ProcessIterator {
     child: std::process::Child,
-    iterator: Box<dyn Iterator<Item = Process>>
+    iterator: Box<dyn Iterator<Item = Process> + Send>,
 }
 
 impl Iterator for ProcessIterator {
@@ -38,7 +38,7 @@ impl Drop for ProcessIterator {
 /// # Errors
 ///
 /// Requires the `execsnoop-bpfcc` binary from `bpfcc-tools`
-pub fn watch() -> io::Result<impl Iterator<Item = Process>> {
+pub fn watch() -> io::Result<ProcessIterator> {
     Command::new(std::env!(
         "EXECSNOOP_PATH",
         "must set EXECSNOOP_PATH env to execsnoop-bpfcc path"
@@ -50,6 +50,8 @@ pub fn watch() -> io::Result<impl Iterator<Item = Process>> {
     .spawn()
     .and_then(|mut child| {
         let stdout = child.stdout.take().ok_or_else(|| {
+            let _res = child.kill();
+            let _res = child.wait();
             io::Error::new(io::ErrorKind::Other, "execsnoop-bpfcc lacks stdout pipe")
         })?;
 
@@ -61,9 +63,7 @@ pub fn watch() -> io::Result<impl Iterator<Item = Process>> {
             child,
             iterator: Box::new(std::iter::from_fn(move || loop {
                 match reader.read_line(&mut line) {
-                    Err(_) | Ok(0) => {
-                        return None
-                    },
+                    Err(_) | Ok(0) => return None,
                     _ => (),
                 }
 
@@ -85,7 +85,7 @@ pub fn watch() -> io::Result<impl Iterator<Item = Process>> {
                 }
 
                 line.clear();
-            }))
+            })),
         })
     })
 }
