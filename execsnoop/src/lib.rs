@@ -4,13 +4,33 @@
 use std::{
     io,
     io::{BufRead, BufReader},
-    process::{Command, Stdio},
+    process::{Command, Stdio}, iter::FromFn,
 };
 
 #[derive(Clone, Debug)]
 pub struct Process {
     pub pid: u32,
     pub parent_pid: u32,
+}
+
+pub struct ProcessIterator {
+    child: std::process::Child,
+    iterator: Box<dyn Iterator<Item = Process>>
+}
+
+impl Iterator for ProcessIterator {
+    type Item = Process;
+
+    fn next(&mut self) -> Option<Process> {
+        self.iterator.next()
+    }
+}
+
+impl Drop for ProcessIterator {
+    fn drop(&mut self) {
+        let _res = self.child.kill();
+        let _res = self.child.wait();
+    }
 }
 
 /// Watches process creation and destruction on Linux.
@@ -37,30 +57,35 @@ pub fn watch() -> io::Result<impl Iterator<Item = Process>> {
 
         let mut line = String::with_capacity(128);
 
-        Ok(std::iter::from_fn(move || loop {
-            match reader.read_line(&mut line) {
-                Err(_) | Ok(0) => return None,
-                _ => (),
-            }
+        Ok(ProcessIterator {
+            child,
+            iterator: Box::new(std::iter::from_fn(move || loop {
+                match reader.read_line(&mut line) {
+                    Err(_) | Ok(0) => {
+                        return None
+                    },
+                    _ => (),
+                }
 
-            let mut fields = line.split_ascii_whitespace();
+                let mut fields = line.split_ascii_whitespace();
 
-            let pid = fields.nth(1);
-            let parent_pid = fields.next();
-
-            if let Some((pid, parent_pid)) = pid.zip(parent_pid) {
-                let pid = pid.parse::<u32>().ok();
-                let parent_pid = parent_pid.parse::<u32>().ok();
+                let pid = fields.nth(1);
+                let parent_pid = fields.next();
 
                 if let Some((pid, parent_pid)) = pid.zip(parent_pid) {
-                    let process = Process { pid, parent_pid };
+                    let pid = pid.parse::<u32>().ok();
+                    let parent_pid = parent_pid.parse::<u32>().ok();
 
-                    line.clear();
-                    return Some(process);
+                    if let Some((pid, parent_pid)) = pid.zip(parent_pid) {
+                        let process = Process { pid, parent_pid };
+
+                        line.clear();
+                        return Some(process);
+                    }
                 }
-            }
 
-            line.clear();
-        }))
+                line.clear();
+            }))
+        })
     })
 }
