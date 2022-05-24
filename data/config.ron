@@ -7,4 +7,7 @@ background: Some(5),
 
 // The priority to assign foreground tasks.
 foreground: Some(-5),
+
+// Enables realtime process priority adjustment.
+use_execsnoop: true,
 )

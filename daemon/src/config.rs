@@ -101,13 +101,26 @@ impl From<u8> for PriorityLevel {
     }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
     #[serde(default)]
     pub background: Option<i8>,
 
     #[serde(default)]
     pub foreground: Option<i8>,
+
+    #[serde(default)]
+    pub use_execsnoop: bool,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            background: Some(5),
+            foreground: Some(-5),
+            use_execsnoop: true,
+        }
+    }
 }
 
 impl Config {
@@ -138,10 +151,7 @@ impl Config {
 
         tracing::info!("Using default config values due to config error");
 
-        Config {
-            background: Some(5),
-            foreground: Some(-5),
-        }
+        Config::default()
     }
 }
 
