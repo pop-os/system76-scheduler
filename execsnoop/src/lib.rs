@@ -23,6 +23,7 @@ pub fn watch() -> io::Result<impl Iterator<Item = Process>> {
         "EXECSNOOP_PATH",
         "must set EXECSNOOP_PATH env to execsnoop-bpfcc path"
     ))
+    .env("LC_ALL", "C")
     .stdout(Stdio::piped())
     .stderr(Stdio::null())
     .stdin(Stdio::null())
