@@ -6,16 +6,16 @@ use std::fs::File;
 use std::io::{self, Read};
 use std::path::Path;
 
-use compact_str::CompactStr;
+use compact_str::CompactString;
 
-pub fn exe_of_pid(pid: u32) -> Option<CompactStr> {
+pub fn exe_of_pid(pid: u32) -> Option<CompactString> {
     let mut itoa = itoa::Buffer::new();
     let exe = concat_in_place::strcat!("/proc/" itoa.format(pid) "/exe");
 
     if let Ok(exe) = std::fs::read_link(Path::new(&exe)) {
         if let Some(exe) = exe.file_name().and_then(std::ffi::OsStr::to_str) {
             if let Some(exe) = exe.split_ascii_whitespace().next() {
-                return Some(CompactStr::from(exe));
+                return Some(CompactString::from(exe));
             }
         }
     }
@@ -23,14 +23,14 @@ pub fn exe_of_pid(pid: u32) -> Option<CompactStr> {
     None
 }
 
-pub fn name_of_pid(pid: u32) -> Option<CompactStr> {
+pub fn name_of_pid(pid: u32) -> Option<CompactString> {
     let mut itoa = itoa::Buffer::new();
     let path = concat_in_place::strcat!("/proc/" itoa.format(pid) "/status");
 
     if let Ok(buffer) = std::fs::read_to_string(&path) {
         if let Some(name) = buffer.lines().next() {
             if let Some(name) = name.strip_prefix("Name:") {
-                return Some(CompactStr::from(name.trim()));
+                return Some(CompactString::from(name.trim()));
             }
         }
     }
