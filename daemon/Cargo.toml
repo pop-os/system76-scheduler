@@ -24,7 +24,7 @@ concat-in-place = "1.1.0"
 itoa = "1.0.1"
 fomat-macros = "0.3.1"
 ioprio = "0.2.0"
-compact_str = { version = "0.3.2", features = ["serde"] }
+compact_str = { version = "0.4", features = ["serde"] }
 execsnoop = { path = "../execsnoop" }
 next-gen = "0.1.1"
 const_format = "0.2.23"

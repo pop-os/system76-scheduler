@@ -1,7 +1,7 @@
 // Copyright 2021-2022 System76 <info@system76.com>
 // SPDX-License-Identifier: MPL-2.0
 
-use compact_str::CompactStr;
+use compact_str::CompactString;
 use concat_in_place::strcat;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -13,8 +13,8 @@ use std::path::{Path, PathBuf};
 const DISTRIBUTION_PATH: &str = "/usr/share/system76-scheduler/";
 const SYSTEM_CONF_PATH: &str = "/etc/system76-scheduler/";
 
-pub type Exceptions = BTreeSet<CompactStr>;
-pub type Assignments = BTreeMap<CompactStr, Assignment>;
+pub type Exceptions = BTreeSet<CompactString>;
+pub type Assignments = BTreeMap<CompactString, Assignment>;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum IoPriority {
@@ -200,7 +200,7 @@ pub fn assignments(exceptions: &Exceptions) -> Assignments {
 
     mk_gen!(let generator = configuration_files(&paths));
 
-    let mut assignments = BTreeMap::<CompactStr, Assignment>::new();
+    let mut assignments = BTreeMap::<CompactString, Assignment>::new();
 
     for path in generator {
         if let Ok(string) = fs::read_to_string(&path) {
