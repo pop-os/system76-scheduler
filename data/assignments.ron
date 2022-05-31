@@ -11,6 +11,7 @@
 // Very high
 (-9, BestEffort(0)): [
     "easyeffects",
+    "jamesdsp",
 ],
 // High priority
 (-5, BestEffort(4)): [
