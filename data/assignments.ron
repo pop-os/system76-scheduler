@@ -102,6 +102,7 @@
     "g++",
     "gcc",
     "gradle",
+    "javac",
     "lld",
     "make",
     "mold",
