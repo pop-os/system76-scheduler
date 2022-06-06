@@ -108,6 +108,7 @@
     "mold",
     "mvn",
     "rustc",
+    "tracker-extract-3",
     "tracker-miner-fs-3",
     "update-initramfs",
     "packagekitd",
