@@ -103,25 +103,19 @@ impl Service {
 
     /// Assign a priority to a newly-created process.
     pub fn assign_new_process(&mut self, pid: u32, parent_pid: u32) {
-        if let Some(foreground) = self.config.foreground {
-            if self.foreground_processes.contains(&parent_pid)
-                && !self.foreground_processes.contains(&pid)
-            {
-                let default = (i32::from(foreground), IoPriority::Standard);
+        self.process_map.insert(pid, Some(parent_pid));
 
-                if let AssignmentStatus::Assigned = self.assign(pid, Some(default)) {
-                    self.foreground_processes.push(pid);
-                    return;
-                }
-            }
+        if self.foreground_processes.contains(&pid) {
+            return;
         }
+
+        let parent_priority = priority(parent_pid);
+        let child_priority = priority(pid);
+        let assigned_priority = self.assigned_priority(pid);
 
         // Child processes inherit the priority of their parent.
         // We want exceptions to avoid inheriting that priority.
-        if Priority::Exception == self.assigned_priority(pid) {
-            let parent_priority = priority(parent_pid);
-            let child_priority = priority(pid);
-
+        if Priority::Exception == assigned_priority {
             if parent_priority == child_priority {
                 let level = ioprio::BePriorityLevel::lowest();
                 let class = ioprio::Class::BestEffort(level);
@@ -132,8 +126,12 @@ impl Service {
             return;
         }
 
-        if self.foreground_processes.contains(&pid) {
-            return;
+        if self.config.foreground.is_some()
+            && self.foreground_processes.contains(&parent_pid)
+            && parent_priority == child_priority
+        {
+            self.foreground_processes.push(pid);
+            return
         }
 
         let _status = self.assign(
@@ -178,11 +176,13 @@ impl Service {
 
             std::mem::swap(&mut foreground, &mut self.foreground_processes);
 
+            let mut assignment_queue = Vec::with_capacity(256);
+
             if let Some(priority) = self
                 .assigned_priority(pid)
                 .with_default(foreground_priority)
             {
-                crate::nice::set_priority(pid, priority);
+                assignment_queue.push((pid, priority));
                 self.foreground_processes.push(pid);
             }
 
@@ -191,12 +191,13 @@ impl Service {
                     if let Some(parent) = parent {
                         if self.foreground_processes.contains(parent)
                             && !self.foreground_processes.contains(pid)
+                            // && priority(*pid) == priority(*parent)
                         {
                             if let Some(priority) = self
                                 .assigned_priority(*pid)
                                 .with_default(foreground_priority)
                             {
-                                crate::nice::set_priority(*pid, priority);
+                                assignment_queue.push((*pid, priority));
                                 self.foreground_processes.push(*pid);
                                 continue 'outer;
                             }
@@ -205,6 +206,11 @@ impl Service {
                 }
 
                 break;
+            }
+
+            for (pid, priority) in assignment_queue {
+                crate::nice::set_priority(pid, priority);
+
             }
         }
     }
@@ -218,19 +224,30 @@ impl Service {
             .background
             .map(|priority| (i32::from(priority), IoPriority::Idle));
 
-        // Assign background priority to all processes.
+        let mut assignment_queue = Vec::with_capacity(256);
+
         for pid in background_processes {
             if self.foreground_processes.contains(&pid) {
                 continue;
             }
+
+            // if let Some(Some(ppid)) = self.process_map.get(&pid) {
+            //     if priority(pid) != priority(*ppid) {
+            //         continue;
+            //     }
+            // }
 
             let priority = self
                 .assigned_priority(pid)
                 .with_optional_default(background_priority);
 
             if let Some(priority) = priority {
-                crate::nice::set_priority(pid, priority);
+                assignment_queue.push((pid, priority));
             }
+        }
+
+        for (pid, priority) in assignment_queue {
+            crate::nice::set_priority(pid, priority);
         }
 
         // Reassign foreground processes in case they were overriden.
