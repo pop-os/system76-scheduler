@@ -18,7 +18,7 @@ pub fn set_priority(process: u32, priority: (i32, ioprio::Priority)) {
                 tracing::debug!("set_priority {}: {:?}", process, priority);
 
                 unsafe {
-                    libc::setpriority(libc::PRIO_PROCESS, process, priority.0);
+                    libc::setpriority(libc::PRIO_PGRP, process, priority.0);
                 }
 
                 #[allow(clippy::cast_possible_wrap)]
