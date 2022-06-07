@@ -99,9 +99,8 @@ async fn cpu(connection: Connection, args: &ArgMatches) -> anyhow::Result<()> {
 
 #[allow(clippy::too_many_lines)]
 async fn daemon(connection: Connection, args: &ArgMatches) -> anyhow::Result<()> {
-    match args.subcommand() {
-        Some(("reload", _)) => return reload(connection).await,
-        _ => (),
+    if let Some(("reload", _)) = args.subcommand() {
+        return reload(connection).await;
     }
 
     tracing::info!("starting daemon service");

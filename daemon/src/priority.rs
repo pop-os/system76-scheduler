@@ -15,9 +15,18 @@ pub enum Priority {
 }
 
 impl Priority {
+    /// Gets the config priority, or the given default priority if assignable.
     pub fn with_default(self, priority: (i32, IoPriority)) -> Option<(i32, ioprio::Priority)> {
+        self.with_optional_default(Some(priority))
+    }
+
+    /// Same as `with_default`, but a `None` value will return `None`
+    pub fn with_optional_default(
+        self,
+        priority: Option<(i32, IoPriority)>,
+    ) -> Option<(i32, ioprio::Priority)> {
         let (cpu, io) = match self {
-            Priority::Assignable => priority,
+            Priority::Assignable => priority?,
             Priority::Config(config) => config,
             _ => return None,
         };
@@ -43,8 +52,8 @@ pub struct Service {
 
 impl Service {
     /// Assign a priority to a process
-    pub fn assign(&self, pid: u32, default: (i32, IoPriority)) -> AssignmentStatus {
-        if let Some(priority) = self.assigned_priority(pid).with_default(default) {
+    pub fn assign(&self, pid: u32, default: Option<(i32, IoPriority)>) -> AssignmentStatus {
+        if let Some(priority) = self.assigned_priority(pid).with_optional_default(default) {
             crate::nice::set_priority(pid, priority);
             return AssignmentStatus::Assigned;
         }
@@ -100,7 +109,7 @@ impl Service {
             {
                 let default = (i32::from(foreground), IoPriority::Standard);
 
-                if let AssignmentStatus::Assigned = self.assign(pid, default) {
+                if let AssignmentStatus::Assigned = self.assign(pid, Some(default)) {
                     self.foreground_processes.push(pid);
                     return;
                 }
@@ -123,14 +132,16 @@ impl Service {
             return;
         }
 
-        if let Some(background) = self.config.background {
-            if self.foreground_processes.contains(&pid) {
-                return;
-            }
-
-            let default = (i32::from(background), IoPriority::Idle);
-            let _status = self.assign(pid, default);
+        if self.foreground_processes.contains(&pid) {
+            return;
         }
+
+        let _status = self.assign(
+            pid,
+            self.config
+                .background
+                .map(|background| (i32::from(background), IoPriority::Idle)),
+        );
     }
 
     /// Reloads the configuration files.
@@ -202,19 +213,23 @@ impl Service {
     pub fn update_process_map(&mut self, map: ProcessMap, background_processes: Vec<u32>) {
         self.process_map = map;
 
-        // Assign background priority to all processes.
-        if let Some(background) = self.config.background {
-            for pid in background_processes {
-                if self.foreground_processes.contains(&pid) {
-                    continue;
-                }
+        let background_priority = self
+            .config
+            .background
+            .map(|priority| (i32::from(priority), IoPriority::Idle));
 
-                if let Some(priority) = self
-                    .assigned_priority(pid)
-                    .with_default((i32::from(background), IoPriority::Idle))
-                {
-                    crate::nice::set_priority(pid, priority);
-                }
+        // Assign background priority to all processes.
+        for pid in background_processes {
+            if self.foreground_processes.contains(&pid) {
+                continue;
+            }
+
+            let priority = self
+                .assigned_priority(pid)
+                .with_optional_default(background_priority);
+
+            if let Some(priority) = priority {
+                crate::nice::set_priority(pid, priority);
             }
         }
 
