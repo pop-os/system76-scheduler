@@ -1,7 +1,6 @@
 #!/usr/bin/make -f
 
 export DESTDIR = debian/system76-scheduler
-export EXECSNOOP_PATH ?= /usr/sbin/execsnoop-bpfcc
 export sysconfdir = "/usr/share"
 export VENDOR ?= 1
 CLEAN ?= 1
@@ -23,7 +22,10 @@ override_dh_auto_clean:
 	fi
 
 override_dh_auto_build:
-	just rootdir=$(DESTDIR) debug=$(DEBUG) vendor=$(VENDOR)
+	just rootdir=$(DESTDIR) \
+		debug=$(DEBUG) \
+		vendor=$(VENDOR) \
+		execsnoop="/usr/sbin/execsnoop-bpfcc"
 
 override_dh_auto_install:
 	just rootdir=$(DESTDIR) sysconfdir="/usr/share" install
