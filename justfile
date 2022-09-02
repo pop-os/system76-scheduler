@@ -19,9 +19,12 @@ confdir := rootdir + sysconfdir
 
 target_bin := bindir + '/' + binary
 
+# Path to execsnoop binary.
+execsnoop := env_var_or_default('EXECSNOOP_PATH', '/usr/sbin/execsnoop-bpfcc')
+
 # Compile pop-launcher
 all: _extract_vendor
-    cargo build {{cargo_args}}
+    env EXECSNOOP_PATH={{execsnoop}} cargo build {{cargo_args}}
 
 # Remove Cargo build artifacts
 clean:
