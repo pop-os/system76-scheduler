@@ -24,6 +24,10 @@ impl Priority {
 
         Some((cpu, io.into()))
     }
+
+    pub fn with_optional_default(self, priority: Option<(i32, IoPriority)>) -> Option<(i32, ioprio::Priority)> {
+        self.with_default(priority?)
+    }
 }
 
 pub enum AssignmentStatus {
@@ -142,59 +146,57 @@ impl Service {
 
     /// Sets a process as the foreground.
     pub fn set_foreground_process(&mut self, pid: u32) {
-        if let Some(foreground_priority) = self.config.foreground {
-            self.foreground = Some(pid);
+        let foreground_priority = self.config.foreground.map(|priority| (i32::from(priority), IoPriority::Standard));
 
-            let background_priority = (
-                i32::from(self.config.background.unwrap_or(0)),
-                IoPriority::Idle,
-            );
+        self.foreground = Some(pid);
 
-            let foreground_priority = (i32::from(foreground_priority), IoPriority::Standard);
+        let background_priority = (
+            i32::from(self.config.background.unwrap_or(0)),
+            IoPriority::Idle,
+        );
 
-            // Unset priorities of previously-set processes.
-            let mut foreground = Vec::new();
-            std::mem::swap(&mut foreground, &mut self.foreground_processes);
+        // Unset priorities of previously-set processes.
+        let mut foreground = Vec::new();
+        std::mem::swap(&mut foreground, &mut self.foreground_processes);
 
-            for process in foreground.drain(..) {
-                if let Some(priority) = self
-                    .assigned_priority(process)
-                    .with_default(background_priority)
-                {
-                    crate::nice::set_priority(process, priority);
-                }
-            }
-
-            std::mem::swap(&mut foreground, &mut self.foreground_processes);
-
+        for process in foreground.drain(..) {
             if let Some(priority) = self
-                .assigned_priority(pid)
-                .with_default(foreground_priority)
+                .assigned_priority(process)
+                .with_default(background_priority)
             {
-                crate::nice::set_priority(pid, priority);
-                self.foreground_processes.push(pid);
+                crate::nice::set_priority(process, priority);
             }
+        }
 
-            'outer: loop {
-                for (pid, parent) in &self.process_map {
-                    if let Some(parent) = parent {
-                        if self.foreground_processes.contains(parent)
-                            && !self.foreground_processes.contains(pid)
+        std::mem::swap(&mut foreground, &mut self.foreground_processes);
+
+        if let Some(priority) = self
+            .assigned_priority(pid)
+            .with_optional_default(foreground_priority)
+        {
+            crate::nice::set_priority(pid, priority);
+            self.foreground_processes.push(pid);
+        }
+
+        'outer: loop {
+            for (pid, parent) in &self.process_map {
+                if let Some(parent) = parent {
+                    if self.foreground_processes.contains(parent)
+                        && !self.foreground_processes.contains(pid)
+                    {
+                        if let Some(priority) = self
+                            .assigned_priority(*pid)
+                            .with_optional_default(foreground_priority)
                         {
-                            if let Some(priority) = self
-                                .assigned_priority(*pid)
-                                .with_default(foreground_priority)
-                            {
-                                crate::nice::set_priority(*pid, priority);
-                                self.foreground_processes.push(*pid);
-                                continue 'outer;
-                            }
+                            crate::nice::set_priority(*pid, priority);
+                            self.foreground_processes.push(*pid);
+                            continue 'outer;
                         }
                     }
                 }
-
-                break;
             }
+
+            break;
         }
     }
 
