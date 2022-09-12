@@ -47,8 +47,8 @@ pub struct Service {
 
 impl Service {
     /// Assign a priority to a process
-    pub fn assign(&self, pid: u32, default: (i32, IoPriority)) -> AssignmentStatus {
-        if let Some(priority) = self.assigned_priority(pid).with_default(default) {
+    pub fn assign(&self, pid: u32, default: Option<(i32, IoPriority)>) -> AssignmentStatus {
+        if let Some(priority) = self.assigned_priority(pid).with_optional_default(default) {
             crate::nice::set_priority(pid, priority);
             return AssignmentStatus::Assigned;
         }
@@ -104,16 +104,18 @@ impl Service {
             {
                 let default = (i32::from(foreground), IoPriority::Standard);
 
-                if let AssignmentStatus::Assigned = self.assign(pid, default) {
+                if let AssignmentStatus::Assigned = self.assign(pid, Some(default)) {
                     self.foreground_processes.push(pid);
                     return;
                 }
             }
         }
 
+        let assigned_priority = self.assigned_priority(pid);
+
         // Child processes inherit the priority of their parent.
         // We want exceptions to avoid inheriting that priority.
-        if Priority::Exception == self.assigned_priority(pid) {
+        if Priority::Exception == assigned_priority {
             let parent_priority = priority(parent_pid);
             let child_priority = priority(pid);
 
@@ -127,14 +129,17 @@ impl Service {
             return;
         }
 
+        let mut default = None;
+
         if let Some(background) = self.config.background {
             if self.foreground_processes.contains(&pid) {
                 return;
             }
 
-            let default = (i32::from(background), IoPriority::Idle);
-            let _status = self.assign(pid, default);
+            default = Some((i32::from(background), IoPriority::Idle));
         }
+
+        let _status = self.assign(pid, default);
     }
 
     /// Reloads the configuration files.
