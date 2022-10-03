@@ -85,7 +85,7 @@ async fn reload(connection: Connection) -> anyhow::Result<()> {
 async fn cpu(connection: Connection, args: &ArgMatches) -> anyhow::Result<()> {
     let mut connection = dbus::ClientProxy::new(&connection).await?;
 
-    match args.value_of("PROFILE").as_ref() {
+    match args.get_one::<&str>("PROFILE") {
         Some(profile) => {
             connection.set_cpu_profile(profile).await?;
         }
