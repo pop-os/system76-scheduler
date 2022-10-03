@@ -24,7 +24,7 @@ execsnoop := '/usr/sbin/execsnoop-bpfcc'
 
 # Compile pop-launcher
 all: _extract_vendor
-    env EXECSNOOP_PATH=$(execsnoop) cargo build {{cargo_args}}
+    env EXECSNOOP_PATH={{execsnoop}} cargo build {{cargo_args}}
 
 # Remove Cargo build artifacts
 clean:
