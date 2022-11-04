@@ -12,30 +12,38 @@ pub fn exe_of_pid(pid: u32) -> Option<CompactString> {
     let mut itoa = itoa::Buffer::new();
     let exe = concat_in_place::strcat!("/proc/" itoa.format(pid) "/exe");
 
-    if let Ok(exe) = std::fs::read_link(Path::new(&exe)) {
-        if let Some(exe) = exe.file_name().and_then(std::ffi::OsStr::to_str) {
-            if let Some(exe) = exe.split_ascii_whitespace().next() {
-                return Some(CompactString::from(exe));
-            }
-        }
-    }
+    let Ok(exe) = std::fs::read_link(Path::new(&exe)) else {
+        return None;
+    };
 
-    None
+    let Some(exe) = exe.file_name().and_then(std::ffi::OsStr::to_str) else {
+        return None;
+    };
+
+    let Some(exe) = exe.split_ascii_whitespace().next() else {
+        return None;
+    };
+
+    Some(CompactString::from(exe))
 }
 
 pub fn name_of_pid(pid: u32) -> Option<CompactString> {
     let mut itoa = itoa::Buffer::new();
     let path = concat_in_place::strcat!("/proc/" itoa.format(pid) "/status");
 
-    if let Ok(buffer) = std::fs::read_to_string(&path) {
-        if let Some(name) = buffer.lines().next() {
-            if let Some(name) = name.strip_prefix("Name:") {
-                return Some(CompactString::from(name.trim()));
-            }
-        }
-    }
+    let Ok(buffer) = std::fs::read_to_string(&path) else {
+        return None;
+    };
 
-    None
+    let Some(name) = buffer.lines().next() else {
+        return None;
+    };
+
+    let Some(name) = name.strip_prefix("Name:") else {
+        return None;
+    };
+
+    Some(CompactString::from(name.trim()))
 }
 
 pub fn read_into_string<P: AsRef<OsStr>>(buf: &mut String, path: P) -> io::Result<&str> {
