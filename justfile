@@ -30,6 +30,10 @@ all: _extract_vendor
 clean:
     cargo clean
 
+# Run `cargo check`
+check:
+    env EXECSNOOP_PATH={{execsnoop}} cargo check
+
 # Also remove .cargo and vendored dependencies
 distclean:
     rm -rf .cargo vendor vendor.tar target
