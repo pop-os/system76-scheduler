@@ -8,27 +8,27 @@ license = "MPL-2.0"
 publish = false
 
 [dependencies]
-anyhow = "1.0.65"
-futures = "0.3.24"
-libc = "0.2.134"
-num_cpus = "1.13.1"
-serde = { version = "1.0.145", features = ["derive"] }
+anyhow = "1.0.66"
+futures = "0.3.25"
+libc = "0.2.137"
+num_cpus = "1.14.0"
+serde = { version = "1.0.147", features = ["derive"] }
 serde_repr = "0.1.9"
 thiserror = "1.0.37"
 upower_dbus = "0.3.0"
-zbus = "3.2.0"
+zbus = "3.4.0"
 zvariant = "3.7.1"
 # ron = "0.7.0"
-tracing = "0.1.36"
+tracing = "0.1.37"
 concat-in-place = "1.1.0"
-itoa = "1.0.3"
+itoa = "1.0.4"
 fomat-macros = "0.3.1"
 ioprio = "0.2.0"
 compact_str = { version = "0.6.1", features = ["serde"] }
 execsnoop = { path = "../execsnoop" }
 next-gen = "0.1.1"
-const_format = "0.2.26"
-clap = { version = "4.0.8", features = ["cargo"] }
+const_format = "0.2.30"
+clap = { version = "4.0.19", features = ["cargo"] }
 
 # Necessary for deserialization of untagged enums in assignments.
 [dependencies.ron]
@@ -36,7 +36,7 @@ git = "https://github.com/MomoLangenstein/ron"
 branch = "253-untagged-enums"
 
 [dependencies.tracing-subscriber]
-version = "0.3.15"
+version = "0.3.16"
 features = ["env-filter"]
 
 [dependencies.tokio]

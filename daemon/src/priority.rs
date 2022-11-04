@@ -63,33 +63,33 @@ impl Service {
             }
         }
 
-        if let Some(exe) = crate::utils::exe_of_pid(pid) {
-            if self.exceptions.contains(&*exe) {
-                return Priority::Exception;
+        let Some(exe) = crate::utils::exe_of_pid(pid) else {
+            return Priority::NotAssignable;
+        };
+
+        if self.exceptions.contains(&*exe) {
+            return Priority::Exception;
+        }
+
+        if let Some(Assignment(cpu, io)) = self.assignments.get(&*exe) {
+            if !is_assignable(pid, *cpu) {
+                return Priority::NotAssignable;
             }
 
-            if let Some(Assignment(cpu, io)) = self.assignments.get(&*exe) {
+            return Priority::Config((cpu.get().into(), *io));
+        }
+
+        if let Some(name) = name {
+            if let Some(Assignment(cpu, io)) = self.assignments.get(&*name) {
                 if !is_assignable(pid, *cpu) {
                     return Priority::NotAssignable;
                 }
 
                 return Priority::Config((cpu.get().into(), *io));
             }
-
-            if let Some(name) = name {
-                if let Some(Assignment(cpu, io)) = self.assignments.get(&*name) {
-                    if !is_assignable(pid, *cpu) {
-                        return Priority::NotAssignable;
-                    }
-
-                    return Priority::Config((cpu.get().into(), *io));
-                }
-            }
-
-            return Priority::Assignable;
         }
 
-        Priority::NotAssignable
+        Priority::Assignable
     }
 
     /// Assign a priority to a newly-created process.

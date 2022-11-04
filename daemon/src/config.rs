@@ -133,18 +133,20 @@ impl Config {
         let mut buffer = String::with_capacity(4096);
 
         for path in directories {
-            if let Ok(config) = crate::utils::read_into_string(&mut buffer, &path) {
-                match ron::from_str(config) {
-                    Ok(config) => return config,
-                    Err(why) => {
-                        tracing::error!(
-                            "{:?}: {} on line {}, column {}",
-                            path,
-                            why.code,
-                            why.position.line,
-                            why.position.col
-                        );
-                    }
+            let Ok(config) = crate::utils::read_into_string(&mut buffer, &path) else {
+                continue;
+            };
+
+            match ron::from_str(config) {
+                Ok(config) => return config,
+                Err(why) => {
+                    tracing::error!(
+                        "{:?}: {} on line {}, column {}",
+                        path,
+                        why.code,
+                        why.position.line,
+                        why.position.col
+                    );
                 }
             }
         }

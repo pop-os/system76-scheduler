@@ -253,56 +253,59 @@ async fn process_monitor(tx: Sender<Event>) {
     let mut parents = HashMap::<u32, Option<u32>>::with_capacity(256);
 
     loop {
-        if let Ok(procfs) = Path::new("/proc").read_dir() {
-            background_processes.clear();
-            parents.clear();
+        let Ok(procfs) = Path::new("/proc").read_dir() else {
+            tracing::error!("failed to read /proc directory: process monitoring stopped");
+            return;
+        };
 
-            for proc_entry in procfs.filter_map(Result::ok) {
-                let proc_path = proc_entry.path();
+        background_processes.clear();
+        parents.clear();
 
-                let pid = if let Some(pid) = proc_path
-                    .file_name()
-                    .and_then(std::ffi::OsStr::to_str)
-                    .and_then(|p| p.parse::<u32>().ok())
-                {
-                    pid
-                } else {
-                    continue;
-                };
+        for proc_entry in procfs.filter_map(Result::ok) {
+            let proc_path = proc_entry.path();
 
-                let mut parent = None;
+            let pid = if let Some(pid) = proc_path
+                .file_name()
+                .and_then(std::ffi::OsStr::to_str)
+                .and_then(|p| p.parse::<u32>().ok())
+            {
+                pid
+            } else {
+                continue;
+            };
 
-                let status = proc_path.join("status");
+            let mut parent = None;
 
-                if let Ok(status) = crate::utils::read_into_string(&mut file_buf, &*status) {
-                    for line in status.lines() {
-                        if let Some(ppid) = line.strip_prefix("PPid:") {
-                            if let Ok(ppid) = ppid.trim().parse::<u32>() {
-                                parent = Some(ppid);
-                            }
+            let status = proc_path.join("status");
 
-                            break;
+            if let Ok(status) = crate::utils::read_into_string(&mut file_buf, &*status) {
+                for line in status.lines() {
+                    if let Some(ppid) = line.strip_prefix("PPid:") {
+                        if let Ok(ppid) = ppid.trim().parse::<u32>() {
+                            parent = Some(ppid);
                         }
-                    }
-                }
 
-                parents.insert(pid, parent);
-
-                // Prevents kernel processes from having their priorities changed.
-                if let Ok(exe) = std::fs::read_link(proc_path.join("exe")) {
-                    if exe.file_name().is_some() {
-                        background_processes.push(pid);
+                        break;
                     }
                 }
             }
 
-            let _res = tx
-                .send(Event::UpdateProcessMap(
-                    parents.clone(),
-                    background_processes.clone(),
-                ))
-                .await;
+            parents.insert(pid, parent);
+
+            // Prevents kernel processes from having their priorities changed.
+            if let Ok(exe) = std::fs::read_link(proc_path.join("exe")) {
+                if exe.file_name().is_some() {
+                    background_processes.push(pid);
+                }
+            }
         }
+
+        let _res = tx
+            .send(Event::UpdateProcessMap(
+                parents.clone(),
+                background_processes.clone(),
+            ))
+            .await;
 
         tokio::time::sleep(Duration::from_secs(60)).await;
     }
