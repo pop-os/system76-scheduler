@@ -4,6 +4,10 @@ Scheduling service which optimizes Linux's CPU scheduler and automatically assig
 
 These changes result in a noticeable improvement in the experienced smoothness and performance of applications and games. The improved responsiveness of applications is most noticeable on older systems with budget hardware, whereas games will benefit from higher framerates and reduced jitter. This is because background applications and services will be given a smaller portion of leftover CPU budget after the active process has had the most time on the CPU.
 
+## Install
+
+See [`./INSTALL.md`](./INSTALL.md) for installation instructions.
+
 ## DBus
 
 - Interface: `com.system76.Scheduler`
