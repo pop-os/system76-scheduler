@@ -29,6 +29,7 @@ execsnoop = { path = "../execsnoop" }
 next-gen = "0.1.1"
 const_format = "0.2.30"
 clap = { version = "4.0.19", features = ["cargo"] }
+procfs = "0.15.1"
 
 # Necessary for deserialization of untagged enums in assignments.
 [dependencies.ron]
