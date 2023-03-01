@@ -6,7 +6,7 @@ use procfs::process::Process;
 
 pub fn set_priority(process: u32, priority: (i32, ioprio::Priority)) {
     // TODO: refactor to if let chain when stabilized
-    if let Ok(pid) = i32::try_from(process) {
+    if let Ok(pid) = process.try_into() {
         if let Ok(process) = Process::new(pid) {
             if let Ok(tasks) = process.tasks() {
                 for task in tasks.filter_map(Result::ok) {
