@@ -60,17 +60,17 @@ impl Service {
             if let Ok(process) = Process::new(pid_i32) {
                 if let Ok(exe) = process.exe() {
                     if let Some(filename) = exe.file_name() {
-                        if self.exceptions.contains(filename.to_str().unwrap()) {
-                            return Priority::Exception;
-                        }
-                        if let Some(Assignment(cpu, io)) =
-                            self.assignments.get(filename.to_str().unwrap())
-                        {
-                            if !is_assignable(pid, *cpu) {
-                                return Priority::NotAssignable;
+                        if let Some(filename_str) = filename.to_str() {
+                            if self.exceptions.contains(filename_str) {
+                                return Priority::Exception;
                             }
+                            if let Some(Assignment(cpu, io)) = self.assignments.get(filename_str) {
+                                if !is_assignable(pid, *cpu) {
+                                    return Priority::NotAssignable;
+                                }
 
-                            return Priority::Config((cpu.get().into(), *io));
+                                return Priority::Config((cpu.get().into(), *io));
+                            }
                         }
                     }
                 } else if let Ok(status) = process.status() {
