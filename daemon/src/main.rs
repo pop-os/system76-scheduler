@@ -20,6 +20,7 @@ use crate::config::cpu::Config as CpuConfig;
 use crate::paths::SchedPaths;
 use clap::ArgMatches;
 use dbus::{CpuMode, Server};
+use procfs::process;
 use std::{collections::HashMap, path::Path, time::Duration};
 use tokio::sync::mpsc::Sender;
 use upower_dbus::UPowerProxy;
@@ -247,57 +248,26 @@ async fn battery_monitor(mut events: PropertyStream<'_, bool>, tx: Sender<Event>
 }
 
 async fn process_monitor(tx: Sender<Event>) {
-    let mut file_buf = String::with_capacity(2048);
-
     let mut background_processes = Vec::with_capacity(256);
     let mut parents = HashMap::<u32, Option<u32>>::with_capacity(256);
 
     loop {
-        let Ok(procfs) = Path::new("/proc").read_dir() else {
-            tracing::error!("failed to read /proc directory: process monitoring stopped");
-            return;
-        };
-
         background_processes.clear();
         parents.clear();
 
-        for proc_entry in procfs.filter_map(Result::ok) {
-            let proc_path = proc_entry.path();
-
-            let pid = if let Some(pid) = proc_path
-                .file_name()
-                .and_then(std::ffi::OsStr::to_str)
-                .and_then(|p| p.parse::<u32>().ok())
-            {
-                pid
-            } else {
-                continue;
-            };
-
-            let mut parent = None;
-
-            let status = proc_path.join("status");
-
-            if let Ok(status) = crate::utils::read_into_string(&mut file_buf, &*status) {
-                for line in status.lines() {
-                    if let Some(ppid) = line.strip_prefix("PPid:") {
-                        if let Ok(ppid) = ppid.trim().parse::<u32>() {
-                            parent = Some(ppid);
+        if let Ok(processes) = process::all_processes() {
+            processes.filter_map(Result::ok).for_each(|process| {
+                if let Ok(status) = process.status() {
+                    if let Ok(pid_u32) = status.pid.try_into() {
+                        if let Ok(ppid_u32) = status.ppid.try_into() {
+                            parents.insert(pid_u32, Some(ppid_u32));
                         }
-
-                        break;
+                        if process.exe().is_ok() {
+                            background_processes.push(pid_u32);
+                        }
                     }
                 }
-            }
-
-            parents.insert(pid, parent);
-
-            // Prevents kernel processes from having their priorities changed.
-            if let Ok(exe) = std::fs::read_link(proc_path.join("exe")) {
-                if exe.file_name().is_some() {
-                    background_processes.push(pid);
-                }
-            }
+            });
         }
 
         let _res = tx
