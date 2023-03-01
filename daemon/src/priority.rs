@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use crate::config::{Assignment, Assignments, Config, CpuPriority, Exceptions, IoPriority};
+use procfs::process::Process;
 use std::collections::HashMap;
-
 type ProcessMap = HashMap<u32, Option<u32>>;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -55,37 +55,40 @@ impl Service {
     /// Gets the config-assigned priority of a process.
     #[must_use]
     pub fn assigned_priority(&self, pid: u32) -> Priority {
-        let name = crate::utils::name_of_pid(pid);
+        //TODO: Refactor to let chain when stabilized
+        if let Ok(pid_i32) = pid.try_into() {
+            if let Ok(process) = Process::new(pid_i32) {
+                if let Ok(exe) = process.exe() {
+                    if let Some(filename) = exe.file_name() {
+                        if self.exceptions.contains(filename.to_str().unwrap()) {
+                            return Priority::Exception;
+                        }
+                        if let Some(Assignment(cpu, io)) =
+                            self.assignments.get(filename.to_str().unwrap())
+                        {
+                            if !is_assignable(pid, *cpu) {
+                                return Priority::NotAssignable;
+                            }
 
-        if let Some(name) = &name {
-            if self.exceptions.contains(name) {
-                return Priority::Exception;
-            }
-        }
+                            return Priority::Config((cpu.get().into(), *io));
+                        }
+                    }
+                } else if let Ok(status) = process.status() {
+                    if let Some(name) = status.name.split_whitespace().next() {
+                        if self.exceptions.contains(name) {
+                            return Priority::Exception;
+                        }
+                        if let Some(Assignment(cpu, io)) = self.assignments.get(name) {
+                            if !is_assignable(pid, *cpu) {
+                                return Priority::NotAssignable;
+                            }
 
-        let Some(exe) = crate::utils::exe_of_pid(pid) else {
-            return Priority::NotAssignable;
-        };
-
-        if self.exceptions.contains(&*exe) {
-            return Priority::Exception;
-        }
-
-        if let Some(Assignment(cpu, io)) = self.assignments.get(&*exe) {
-            if !is_assignable(pid, *cpu) {
-                return Priority::NotAssignable;
-            }
-
-            return Priority::Config((cpu.get().into(), *io));
-        }
-
-        if let Some(name) = name {
-            if let Some(Assignment(cpu, io)) = self.assignments.get(&*name) {
-                if !is_assignable(pid, *cpu) {
+                            return Priority::Config((cpu.get().into(), *io));
+                        }
+                    }
+                } else {
                     return Priority::NotAssignable;
                 }
-
-                return Priority::Config((cpu.get().into(), *io));
             }
         }
 
