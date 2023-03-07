@@ -1,0 +1,17 @@
+[package]
+name = "system76-scheduler-config"
+version = "2.0.0"
+edition = "2021"
+
+[dependencies]
+compact_str = { version = "0.7.0", features = ["serde"]}
+concat-in-place = "1.1.0"
+tracing = "0.1.37"
+fomat-macros = "0.3.2"
+const_format = "0.2.30"
+kdl = "4.6.0"
+generator = "0.7.3"
+wildmatch = "2.1.1"
+ioprio = "0.2.0"
+memchr = "2.5.0"
+libc = "0.2.139"

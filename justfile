@@ -1,51 +1,51 @@
-rootdir := ''
-prefix := '/usr'
-sysconfdir := '/etc'
-root := rootdir + prefix
-debug := '0'
-vendor := '0'
-
-target := if debug == '1' { 'debug' } else { 'release' }
-vendor_args := if vendor == '1' { '--frozen --offline' } else { '' }
-debug_args := if debug == '1' { '' } else { '--release' }
-cargo_args := vendor_args + ' ' + debug_args
-
 binary := 'system76-scheduler'
 id := 'com.system76.Scheduler'
 
-bindir := root + '/bin'
-libdir := root + '/lib'
-confdir := rootdir + sysconfdir
+rootdir := ''
+prefix := '/usr'
+sysconfdir := '/etc'
 
-target_bin := bindir + '/' + binary
+bindir := clean(rootdir / prefix) / 'bin'
+libdir := clean(rootdir / prefix) / 'lib'
+confdir := clean(rootdir / sysconfdir)
+
+target-bin := bindir / binary
 
 # Path to execsnoop binary.
 execsnoop := '/usr/sbin/execsnoop-bpfcc'
-
-# Compile pop-launcher
-all: _extract_vendor
-    env EXECSNOOP_PATH={{execsnoop}} cargo build {{cargo_args}}
 
 # Remove Cargo build artifacts
 clean:
     cargo clean
 
-# Run `cargo check`
-check:
-    env EXECSNOOP_PATH={{execsnoop}} cargo check
-
 # Also remove .cargo and vendored dependencies
 distclean:
     rm -rf .cargo vendor vendor.tar target
+
+# Compile with debug profile
+build-debug *args:
+    env EXECSNOOP_PATH={{execsnoop}} cargo build {{args}}
+
+# Compile with release profile
+build-release *args: (build-debug '--release' args)
+
+# Compile with a vendored tarball
+build-vendored *args: vendor-extract (build-release '--frozen --offline' args)
+
+# Check for errors and linter warnings
+check *args:
+    env EXECSNOOP_PATH={{execsnoop}} cargo clippy --all-features {{args}} -- -W clippy::pedantic
+
+# Runs a check with JSON message format for IDE integration
+check-json: (check '--message-format=json')
 
 # Install everything
 install:
     mkdir -p {{confdir}}/system76-scheduler/assignments \
         {{confdir}}/system76-scheduler/exceptions
-    install -Dm0644 data/config.ron {{confdir}}/system76-scheduler/config.ron
-    install -Dm0644 data/assignments.ron {{confdir}}/system76-scheduler/assignments/default.ron
-    install -Dm0644 data/exceptions.ron {{confdir}}/system76-scheduler/exceptions/default.ron
-    install -Dm0755 target/{{target}}/{{binary}} {{target_bin}}
+    install -Dm0644 data/config.kdl {{confdir}}/system76-scheduler/config.kdl
+    install -Dm0644 data/assignments.kdl {{confdir}}/system76-scheduler/assignments/default.kdl
+    install -Dm0755 target/release/{{binary}} {{target-bin}}
     install -Dm0644 data/{{id}}.service {{libdir}}/systemd/system/{{id}}.service
     install -Dm0644 data/{{id}}.conf {{confdir}}/dbus-1/system.d/{{id}}.conf
 
@@ -54,7 +54,7 @@ uninstall:
     rm -rf {{confdir}}/system76-scheduler \
         {{confdir}}/dbus-1/system.d/{{id}}.conf \
         {{libdir}}/systemd/system/{{id}}.service \
-        {{target_bin}}
+        {{target-bin}}
 
 # Vendor Cargo dependencies locally
 vendor:
@@ -67,10 +67,8 @@ vendor:
     tar pcf vendor.tar vendor
     rm -rf vendor
 
-# Extracts vendored dependencies if vendor=1
-_extract_vendor:
-    #!/usr/bin/env sh
-    if test {{vendor}} = 1; then
-        rm -rf vendor
-        tar pxf vendor.tar
-    fi
+# Extracts vendored dependencies
+[private]
+vendor-extract:
+    rm -rf vendor
+    tar pxf vendor.tar

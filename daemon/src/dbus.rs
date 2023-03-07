@@ -39,7 +39,7 @@ pub(crate) struct Server {
     default_path = "/com/system76/Scheduler"
 )]
 pub trait Client {
-    #[dbus_interface(property)]
+    #[dbus_proxy(property)]
     fn cpu_mode(&self) -> zbus::fdo::Result<CpuMode>;
 
     #[dbus_proxy(property)]
@@ -96,4 +96,23 @@ impl Server {
     async fn set_foreground_process(&mut self, pid: u32) {
         let _res = self.tx.send(Event::SetForegroundProcess(pid)).await;
     }
+}
+
+pub(crate) async fn interface_handle(
+    connection: &zbus::Connection,
+) -> Option<zbus::InterfaceRef<Server>> {
+    let interface_result = connection
+        .object_server()
+        .interface::<_, Server>("/com/system76/Scheduler")
+        .await;
+
+    let iface_handle = match interface_result {
+        Ok(iface_handler) => iface_handler,
+        Err(why) => {
+            tracing::error!("DBus interface not reachable: {:#?}", why);
+            return None;
+        }
+    };
+
+    Some(iface_handle)
 }

@@ -1,11 +1,11 @@
 // Copyright 2022 System76 <info@system76.com>
 // SPDX-License-Identifier: MPL-2.0
 
-use std::{
-    io,
-    io::{BufRead, BufReader},
-    process::{Command, Stdio},
-};
+use atoi::atoi;
+use bstr::{BStr, ByteSlice};
+use bytelines::ByteLines;
+use std::io::{self, BufReader};
+use std::process::{Command, Stdio};
 
 #[derive(Clone, Debug)]
 pub struct Process {
@@ -13,12 +13,12 @@ pub struct Process {
     pub parent_pid: u32,
 }
 
-pub struct ProcessIterator {
+pub struct ProcessIterator<I> {
     child: std::process::Child,
-    iterator: Box<dyn Iterator<Item = Process> + Send>,
+    iterator: I,
 }
 
-impl Iterator for ProcessIterator {
+impl<I: Iterator<Item = Process> + Send> Iterator for ProcessIterator<I> {
     type Item = Process;
 
     fn next(&mut self) -> Option<Process> {
@@ -26,7 +26,7 @@ impl Iterator for ProcessIterator {
     }
 }
 
-impl Drop for ProcessIterator {
+impl<I> Drop for ProcessIterator<I> {
     fn drop(&mut self) {
         let _res = self.child.kill();
         let _res = self.child.wait();
@@ -38,7 +38,7 @@ impl Drop for ProcessIterator {
 /// # Errors
 ///
 /// Requires the `execsnoop-bpfcc` binary from `bpfcc-tools`
-pub fn watch() -> io::Result<ProcessIterator> {
+pub fn watch() -> io::Result<ProcessIterator<impl Iterator<Item = Process> + Send>> {
     Command::new(std::env!(
         "EXECSNOOP_PATH",
         "must set EXECSNOOP_PATH env to execsnoop-bpfcc path"
@@ -55,37 +55,29 @@ pub fn watch() -> io::Result<ProcessIterator> {
             io::Error::new(io::ErrorKind::Other, "execsnoop-bpfcc lacks stdout pipe")
         })?;
 
-        let mut reader = BufReader::new(stdout);
-
-        let mut line = String::with_capacity(128);
+        let mut reader = ByteLines::new(BufReader::with_capacity(16 * 1024, stdout));
 
         Ok(ProcessIterator {
             child,
-            iterator: Box::new(std::iter::from_fn(move || loop {
-                match reader.read_line(&mut line) {
-                    Err(_) | Ok(0) => return None,
-                    _ => (),
-                }
+            iterator: std::iter::from_fn(move || {
+                while let Some(Ok(line)) = reader.next() {
+                    let mut fields = BStr::new(line).fields();
 
-                let mut fields = line.split_ascii_whitespace();
-
-                let pid = fields.nth(1);
-                let parent_pid = fields.next();
-
-                if let Some((pid, parent_pid)) = pid.zip(parent_pid) {
-                    let pid = pid.parse::<u32>().ok();
-                    let parent_pid = parent_pid.parse::<u32>().ok();
+                    let pid = fields.nth(1);
+                    let parent_pid = fields.next();
 
                     if let Some((pid, parent_pid)) = pid.zip(parent_pid) {
-                        let process = Process { pid, parent_pid };
+                        let pid = atoi::<u32>(pid);
+                        let parent_pid = atoi::<u32>(parent_pid);
 
-                        line.clear();
-                        return Some(process);
+                        if let Some((pid, parent_pid)) = pid.zip(parent_pid) {
+                            return Some(Process { pid, parent_pid });
+                        }
                     }
                 }
 
-                line.clear();
-            })),
+                None
+            }),
         })
     })
 }

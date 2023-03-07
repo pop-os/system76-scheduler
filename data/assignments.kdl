@@ -1,0 +1,72 @@
+assignments {
+	recording {
+		amsynth
+		easyeffects
+		jamesdsp
+		jitsi
+		mumble
+		obs
+		teams
+		wireplumber
+		zoom
+	}
+
+	games {
+		lutris
+		steam
+		vrcompositor
+		vrdashboard
+		vrmonitor
+		vrserver
+		* parent="steam"
+		* parent="lutris"
+	}
+
+	desktop-environment {
+		cosmic-comp
+		gnome-shell
+		i3wm
+		kwin
+		sway
+		Xorg
+	}
+
+	package-manager {
+		apt
+		apt-get
+		dpkg
+		flatpak
+		fwupd
+		packagekitd
+		update-initramfs
+	}
+
+	batch {
+		boinc
+		c++
+		cargo
+		cargo
+		clang
+		cmake
+		cpp
+		FAHClient
+		FAHCoreWrapper
+		fossilize-replay
+		g++
+		gcc
+		gradle
+		javac
+		ld
+		lld
+		make
+		mold
+		mvn
+		ninja
+		rustc
+		tracker-miner-fs-3
+	}
+}
+
+exceptions {
+
+}

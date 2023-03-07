@@ -1,0 +1,9 @@
+[package]
+name = "system76-scheduler-pipewire"
+description = "PipeWire integration for system76-scheduler"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+pipewire = "0.6.0"

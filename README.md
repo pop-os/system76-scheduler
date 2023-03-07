@@ -15,105 +15,72 @@ The `SetForeground(u32)` method can be called to change the active foreground pr
 
 The configuration file is stored at the following locations:
 
-- User-config: `/etc/system76-scheduler/config.ron`
-- Distribution: `/usr/share/system76-scheduler/config.ron`
+- System: `/etc/system76-scheduler/config.kdl`
+- Distribution: `/usr/share/system76-scheduler/config.kdl`
 
-```rs
-{
-    // The priority to assign background tasks.
-    background: Some(5),
+Presence of the system configuration will override the distribution configuration. The documented [default configuration can be found at here](./data/config.kdl).
 
-    // The priority to assign foreground tasks.
-    foreground: Some(-5),
-}
-```
-
-- When `background` is set to `None`, background process priorities will not be assigned.
-- When `foreground` is set to `None`, foreground and background priorities will not be assigned.
+Note that if the `background` and `foreground` assignment profiles are defined, then foreground process management will be enabled. Likewise, if a `pipewire` profile is defined, then pipewire process monitoring will be enabled.
 
 ## Process Priority Assignments
 
-RON configuration files are stored at the following locations:
+KDL configuration files are stored at the following locations:
 
 - User-config: `/etc/system76-scheduler/assignments/`
 - Distribution: `/usr/share/system76-scheduler/assignments/`
 
-They define the default priorities for processes scanned. The syntax of `.ron` configuration files in these directories is as follows:
+An [example configuration is provided here](./data/assignments.kdl). It is parsed the same as the assignments and exceptions nodes in the main config, and profiles can inherit values from the previous assignment of the same name.
 
-```rs
-{
-    (CPU_PRIORITY, IO_PRIORITY): [
-        "exe_name1",
-        "exe_name2"
-    ],
-    CPU_PRIORITY: [
-        "exe_name3",
-        "exe_name4"
-    ],
-    IO_PRIORITY: [
-        "exe_name5"
-    ]
+### Profile
+
+```
+assignments {
+    {{profile-name}} {{profile-properties}}
 }
 ```
 
-Where:
+The `profile-name` can refer to any name of your choice. If the name matches a previous assignment, it will inherit the values from that assignment, plus any additional profile properties assigned.
 
-- `CPU_PRIORITY` is a number between `-20` and `19`
-- `IO_PRIORITY` is one of:
-    - `Idle`
-    - `Standard`
-    - `BestEffort(PRIORITY_LEVEL)`
-    - `Realtime(PRIORITY_LEVEL)`
-- `PRIORITY_LEVEL` is a number between `0` and `7`
+The `profile-properties` may contain any of
 
+- Niceness priority, defined as `nice=-20` through `nice=19`
 
-A real world example below:
+- A scheduler policy defined as one of:
+    - `sched="batch"`
+    - `sched="idle"`,
+    - `sched="other"`
+    - `sched=(fifo)1` through `sched=(fifo)99`
+    - `sched=(rr)1` through `sched=(rr)99`
 
-```rs
-{
-    // Very high
-    (-9, BestEffort(0)): [
-        "easyeffects",
-    ],
-    // High priority
-    (-5, BestEffort(4)): [
-        "gnome-shell",
-        "kwin",
-        "Xorg"
-    ],
-    // Default
-    0: [ "dbus", "dbus-daemon", "systemd"],
-    // Absolute lowest priority
-    (19, Idle): [
-        "c++",
-        "cargo",
-        "clang",
-        "cpp",
-        "g++",
-        "gcc",
-        "lld",
-        "make",
-        "rustc",
-    ]
+> Realtime scheduler policies assign a priority level between 1 and 99. Higher values have higher priority. It is recommended not to set a higher priority than hardware IRQs (>49)
+
+- An I/O priority defined as one of
+    - `io="idle"`
+    - `io=(best-effort)0` through `io=(best-effort)7`
+    - `io=(realtime)0` through `io=(realtime)7`
+
+> The best-effort and realtime classes have priority levels between 0 and 7, where 7 has the least priority, and 0 is the highest priority
+
+### Assignments
+
+Children of the profile define what processes to assign to it
+
+```kdl
+{{profile-name}} {{profile-properties}} {
+    "/match/by/cmdline" {{profile-properties}}
+    match-by-name {{profile-properties}}
+    * {{condition-properties}} {{profile-properties}}
 }
 ```
 
-## Process Priority Exceptions
+- A node name starting with a `/` is a match by command line path
+- A node name otherwise is a match by process name
+- `*` matches all processes, used with additional `condition-properties`
+    - properties are [wild-match'd](https://github.com/becheran/wildmatch)
+    - properties may start with `!` to exclude results matching the condition
+    - `cgroup="cgroup-path"` matches processes by a cgroup
+    - `parent="name"` matches processes by the process name of the parent
 
-RON configuration files are stored at the following locations:
-
-- User-config: `/etc/system76-scheduler/exceptions/`
-- Distribution: `/usr/share/system76-scheduler/exceptions/`
-
-The files contain a list of process names that are prohibited from having priority adjustments.
-
-```rs
-([
-"pipewire",
-"pipewire-pulse",
-"wireplumber"
-])
-```
 
 ## CPU Scheduler Latency Configurations
 
