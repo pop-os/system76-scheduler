@@ -4,15 +4,15 @@
 #[macro_use]
 extern crate zbus;
 
-use concat_in_place::strcat;
+use qcell::LCellOwner;
 use scheduler_pipewire::processes_from_socket;
 pub use system76_scheduler_config as config;
 use system76_scheduler_pipewire as scheduler_pipewire;
 
 mod cfs;
 mod dbus;
-mod pid;
 mod priority;
+mod process;
 mod service;
 mod utils;
 
@@ -20,11 +20,8 @@ use cfs::paths::SchedPaths;
 use clap::ArgMatches;
 use dbus::{CpuMode, Server};
 use std::{
-    collections::{BTreeSet, HashMap},
-    os::unix::{
-        net::UnixStream,
-        prelude::{OsStrExt, OwnedFd},
-    },
+    collections::BTreeSet,
+    os::unix::{net::UnixStream, prelude::OwnedFd},
     path::PathBuf,
     time::{Duration, Instant},
 };
@@ -36,65 +33,85 @@ use crate::utils::Buffer;
 
 #[derive(Debug)]
 enum Event {
-    ExecCreate(Instant, execsnoop::Process),
+    ExecCreate {
+        when: Instant,
+        pid: u32,
+        parent_pid: u32,
+        name: String,
+        cmdline: String,
+    },
     OnBattery(bool),
     Pipewire(scheduler_pipewire::ProcessEvent),
+    RefreshProcessMap,
     ReloadConfiguration,
     SetCpuMode,
     SetCustomCpuMode,
     SetForegroundProcess(u32),
-    UpdateProcessMap(HashMap<u32, Option<u32>>, Vec<u32>),
 }
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> anyhow::Result<()> {
-    pipewire::init();
+fn main() -> anyhow::Result<()> {
+    let mut result = Ok(());
 
-    let future = async {
-        if std::env::var_os("RUST_LOG").is_none() {
-            std::env::set_var("RUST_LOG", "info");
-        }
+    LCellOwner::scope(|owner| {
+        pipewire::init();
 
-        tracing_subscriber::fmt()
-            .pretty()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .with_writer(std::io::stderr)
-            .without_time()
-            .with_line_number(false)
-            .with_file(false)
-            .with_target(false)
-            .init();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
 
-        let connection = Connection::system().await?;
+        let main = async {
+            let future = async {
+                if std::env::var_os("RUST_LOG").is_none() {
+                    std::env::set_var("RUST_LOG", "info");
+                }
 
-        let matches = clap::command!()
-            .propagate_version(true)
-            .subcommand_required(true)
-            .arg_required_else_help(true)
-            .subcommand(
-                clap::Command::new("cpu")
-                    .about("select a CFS scheduler profile")
-                    .arg(clap::arg!([PROFILE])),
-            )
-            .subcommand(
-                clap::Command::new("daemon")
-                    .about("launch the system daemon")
-                    .subcommand(clap::Command::new("reload").about("reload system configuration")),
-            )
-            .get_matches();
+                tracing_subscriber::fmt()
+                    .pretty()
+                    .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+                    .with_writer(std::io::stderr)
+                    .without_time()
+                    .with_line_number(false)
+                    .with_file(false)
+                    .with_target(false)
+                    .init();
 
-        match matches.subcommand() {
-            Some(("cpu", matches)) => cpu(connection, matches).await,
-            Some(("daemon", matches)) => daemon(connection, matches).await,
-            _ => Ok(()),
-        }
-    };
+                let connection = Connection::system().await?;
 
-    let result = tokio::task::LocalSet::new().run_until(future).await;
+                let matches = clap::command!()
+                    .propagate_version(true)
+                    .subcommand_required(true)
+                    .arg_required_else_help(true)
+                    .subcommand(
+                        clap::Command::new("cpu")
+                            .about("select a CFS scheduler profile")
+                            .arg(clap::arg!([PROFILE])),
+                    )
+                    .subcommand(
+                        clap::Command::new("daemon")
+                            .about("launch the system daemon")
+                            .subcommand(
+                                clap::Command::new("reload").about("reload system configuration"),
+                            ),
+                    )
+                    .get_matches();
 
-    unsafe {
-        pipewire::deinit();
-    }
+                match matches.subcommand() {
+                    Some(("cpu", matches)) => cpu(connection, matches).await,
+                    Some(("daemon", matches)) => daemon(connection, matches, owner).await,
+                    _ => Ok(()),
+                }
+            };
+
+            result = tokio::task::LocalSet::new().run_until(future).await;
+
+            unsafe {
+                pipewire::deinit();
+            }
+        };
+
+        runtime.block_on(main);
+    });
 
     result
 }
@@ -124,14 +141,18 @@ async fn cpu(connection: Connection, args: &ArgMatches) -> anyhow::Result<()> {
 }
 
 #[allow(clippy::too_many_lines)]
-async fn daemon(connection: Connection, args: &ArgMatches) -> anyhow::Result<()> {
+async fn daemon(
+    connection: Connection,
+    args: &ArgMatches,
+    owner: LCellOwner<'_>,
+) -> anyhow::Result<()> {
     let mut buffer = Buffer::new();
 
     if let Some(("reload", _)) = args.subcommand() {
         return reload(connection).await;
     }
 
-    let service = &mut service::Service::new(SchedPaths::new()?);
+    let service = &mut service::Service::new(owner, SchedPaths::new()?);
     service.reload_configuration();
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(4);
@@ -154,29 +175,41 @@ async fn daemon(connection: Connection, args: &ArgMatches) -> anyhow::Result<()>
 
     // If enabled, monitors processes and applies priorities to them.
     if service.config.process_scheduler.enable {
-        // Spawns a process monitor that updates process map info.
-        tokio::task::spawn_local(process_monitor(
-            tx.clone(),
-            service.config.process_scheduler.refresh_rate,
-        ));
+        // Schedules process updates
+        tokio::task::spawn_local({
+            let refresh_rate =
+                Duration::from_secs(u64::from(service.config.process_scheduler.refresh_rate));
+            let tx = tx.clone();
+            async move {
+                let _res = tx.send(Event::RefreshProcessMap).await;
+                tokio::time::sleep(refresh_rate).await;
+            }
+        });
 
         // Use execsnoop-bpfcc to watch for new processes being created.
         if service.config.process_scheduler.execsnoop {
             tracing::debug!("monitoring process IDs in realtime with execsnoop");
-            if let Ok(watcher) = execsnoop::watch() {
-                let tx = tx.clone();
-
-                // Listen for spawned process, scheduling them to be handled with a delay of 1 second after creation.
-                // The delay is to ensure that a process has been added to a cgroup
-                std::thread::spawn(move || {
-                    for process in watcher {
-                        let _res = tx.blocking_send(Event::ExecCreate(
-                            Instant::now() + Duration::from_secs(1),
-                            process,
-                        ));
+            let tx = tx.clone();
+            std::thread::spawn(move || {
+                if let Ok(mut watcher) = execsnoop::watch() {
+                    // Listen for spawned process, scheduling them to be handled with a delay of 1 second after creation.
+                    // The delay is to ensure that a process has been added to a cgroup
+                    while let Some(process) = watcher.next() {
+                        if let (Ok(name), Ok(cmdline)) = (
+                            std::str::from_utf8(process.name),
+                            std::str::from_utf8(process.cmd),
+                        ) {
+                            let _res = tx.blocking_send(Event::ExecCreate {
+                                when: Instant::now() + Duration::from_secs(1),
+                                pid: process.pid,
+                                parent_pid: process.parent_pid,
+                                name: name.to_owned(),
+                                cmdline: cmdline.to_owned(),
+                            });
+                        }
                     }
-                });
-            }
+                }
+            });
         }
 
         // Monitors pipewire-connected processes.
@@ -201,18 +234,21 @@ async fn daemon(connection: Connection, args: &ArgMatches) -> anyhow::Result<()>
 
     while let Some(event) = rx.recv().await {
         match event {
-            Event::ExecCreate(
+            Event::ExecCreate {
                 when,
-                execsnoop::Process {
-                    parent_pid, pid, ..
-                },
-            ) => {
+                pid,
+                parent_pid,
+                name,
+                cmdline,
+            } => {
                 tokio::time::sleep_until(tokio::time::Instant::from_std(when)).await;
-                service.assign_new_process(&mut buffer, pid, parent_pid);
+                service.assign_new_process(&mut buffer, pid, parent_pid, name, cmdline);
             }
 
-            Event::UpdateProcessMap(map, background_processes) => {
-                service.update_process_map(&mut buffer, map, background_processes);
+            Event::RefreshProcessMap => {
+                service.refresh_process_map(&mut buffer);
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                service.assign_process_map_priorities(&mut buffer);
             }
 
             Event::SetForegroundProcess(pid) => {
@@ -359,75 +395,6 @@ async fn pipewire_service(tx: Sender<Event>) {
     };
 
     futures::join!(session_monitor, session_spawner);
-}
-
-async fn process_monitor(tx: Sender<Event>, refresh_rate: u16) {
-    tracing::debug!("monitoring system process IDs");
-    let mut file_buf = Vec::with_capacity(2048);
-
-    let mut background_processes = Vec::with_capacity(256);
-    let mut parents = HashMap::<u32, Option<u32>>::with_capacity(256);
-
-    let mut path = String::from("/proc/");
-    let proc_truncate = path.len();
-
-    loop {
-        path.truncate(proc_truncate);
-        let Ok(procfs) = std::fs::read_dir(&path) else {
-            tracing::error!("failed to read /proc directory: process monitoring stopped");
-            return;
-        };
-
-        background_processes.clear();
-        parents.clear();
-
-        for proc_entry in procfs.filter_map(Result::ok) {
-            let file_name = proc_entry.file_name();
-
-            let Some(pid) = atoi::atoi::<u32>(file_name.as_bytes()) else {
-                continue;
-            };
-
-            let Some(file_name) = file_name.to_str() else {
-                continue;
-            };
-
-            path.truncate(proc_truncate);
-
-            strcat!(&mut path, file_name "/status");
-
-            let mut parent = None;
-
-            if let Some(value) = utils::file_key(&mut file_buf, &path, "PPid:") {
-                if let Some(ppid) = atoi::atoi::<u32>(value) {
-                    parent = Some(ppid);
-                }
-            }
-
-            parents.insert(pid, parent);
-
-            path.truncate(proc_truncate + file_name.len() + 1);
-            path.push_str("exe");
-
-            // Prevents kernel processes from having their priorities changed.
-            if let Ok(exe) = std::fs::read_link(&path) {
-                if exe.file_name().is_some() {
-                    background_processes.push(pid);
-                }
-            }
-        }
-
-        tokio::time::sleep(Duration::from_secs(1)).await;
-
-        let _res = tx
-            .send(Event::UpdateProcessMap(
-                parents.clone(),
-                background_processes.clone(),
-            ))
-            .await;
-
-        tokio::time::sleep(Duration::from_secs(u64::from(refresh_rate))).await;
-    }
 }
 
 fn autogroup_set(enable: bool) {

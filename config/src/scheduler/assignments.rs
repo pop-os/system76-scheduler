@@ -7,6 +7,7 @@ use wildmatch::WildMatch;
 
 #[derive(Default, Debug)]
 pub struct Condition {
+    pub descends: Option<MatchCondition>,
     pub cgroup: Option<MatchCondition>,
     pub parent: Option<MatchCondition>,
 }
@@ -36,30 +37,26 @@ impl MatchCondition {
     }
 }
 
-#[derive(Copy, Clone)]
-pub struct ProcessConditions<'a> {
-    pub cgroup: &'a str,
-    pub parent: &'a str,
-}
-
 #[derive(Default, Debug)]
 pub struct Assignments {
+    pub conditions: Vec<(Condition, Profile)>,
+    pub(crate) exceptions_by_name: BTreeSet<Box<str>>,
+    pub(crate) exceptions_by_cmdline: BTreeSet<Box<str>>,
+    pub exceptions_conditions: Vec<Condition>,
     pub(crate) profiles: BTreeMap<Box<str>, Profile>,
     pub(crate) profile_by_name: BTreeMap<Box<str>, Profile>,
     pub(crate) profile_by_cmdline: BTreeMap<Box<str>, Profile>,
-    pub(crate) conditions: Vec<(Condition, Profile)>,
-    pub(crate) exceptions_by_name: BTreeSet<Box<str>>,
-    pub(crate) exceptions_by_cmdline: BTreeSet<Box<str>>,
 }
 
 impl Assignments {
     pub fn clear(&mut self) {
+        self.conditions.clear();
         self.profiles.clear();
         self.profile_by_name.clear();
         self.profile_by_cmdline.clear();
-        self.conditions.clear();
         self.exceptions_by_cmdline.clear();
         self.exceptions_by_name.clear();
+        self.exceptions_conditions.clear();
     }
 
     #[must_use]
@@ -70,27 +67,6 @@ impl Assignments {
     #[must_use]
     pub fn get_by_cmdline<'a>(&'a self, process: &str) -> Option<&'a Profile> {
         self.profile_by_cmdline.get(process)
-    }
-
-    #[must_use]
-    pub fn get_by_condition<'a>(&'a self, conditions: ProcessConditions) -> Option<&'a Profile> {
-        for (pattern, profile) in self.conditions.iter().rev() {
-            if let Some(ref cgroup) = pattern.cgroup {
-                if !cgroup.matches(conditions.cgroup) {
-                    continue;
-                }
-            }
-
-            if let Some(ref parent) = pattern.parent {
-                if !parent.matches(conditions.parent) {
-                    continue;
-                }
-            }
-
-            return Some(profile);
-        }
-
-        None
     }
 
     #[must_use]
@@ -126,6 +102,10 @@ impl Assignments {
 
     pub fn assign_exception_by_cmdline(&mut self, name: &str) {
         self.exceptions_by_cmdline.insert(name.into());
+    }
+
+    pub fn assign_exception_by_condition(&mut self, condition: Condition) {
+        self.exceptions_conditions.push(condition);
     }
 
     pub fn assign_exception_by_name(&mut self, name: &str) {

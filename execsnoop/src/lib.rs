@@ -8,25 +8,51 @@ use std::io::{self, BufReader};
 use std::process::{Command, Stdio};
 
 #[derive(Clone, Debug)]
-pub struct Process {
+pub struct Process<'a> {
+    pub name: &'a [u8],
+    pub cmd: &'a [u8],
     pub pid: u32,
     pub parent_pid: u32,
 }
 
-pub struct ProcessIterator<I> {
+pub struct ProcessIterator {
     child: std::process::Child,
-    iterator: I,
+    stream: ByteLines<BufReader<std::process::ChildStdout>>,
+    name_buffer: Vec<u8>,
+    cmd_buffer: Vec<u8>,
 }
 
-impl<I: Iterator<Item = Process> + Send> Iterator for ProcessIterator<I> {
-    type Item = Process;
+impl ProcessIterator {
+    #[allow(clippy::should_implement_trait)]
+    pub fn next(&mut self) -> Option<Process> {
+        while let Some(Ok(line)) = self.stream.next() {
+            let mut fields = BStr::new(line).fields();
 
-    fn next(&mut self) -> Option<Process> {
-        self.iterator.next()
+            if let (Some(name), Some(pid), Some(parent_pid), Some(cmd)) =
+                (fields.next(), fields.next(), fields.next(), fields.nth(1))
+            {
+                if let (Some(pid), Some(parent_pid)) = (atoi::<u32>(pid), atoi::<u32>(parent_pid)) {
+                    self.name_buffer.clear();
+                    self.name_buffer.extend_from_slice(name);
+
+                    self.cmd_buffer.clear();
+                    self.cmd_buffer.extend_from_slice(cmd);
+
+                    return Some(Process {
+                        name: &self.name_buffer,
+                        cmd: &self.cmd_buffer,
+                        pid,
+                        parent_pid,
+                    });
+                }
+            }
+        }
+
+        None
     }
 }
 
-impl<I> Drop for ProcessIterator<I> {
+impl Drop for ProcessIterator {
     fn drop(&mut self) {
         let _res = self.child.kill();
         let _res = self.child.wait();
@@ -38,7 +64,7 @@ impl<I> Drop for ProcessIterator<I> {
 /// # Errors
 ///
 /// Requires the `execsnoop-bpfcc` binary from `bpfcc-tools`
-pub fn watch() -> io::Result<ProcessIterator<impl Iterator<Item = Process> + Send>> {
+pub fn watch() -> io::Result<ProcessIterator> {
     Command::new(std::env!(
         "EXECSNOOP_PATH",
         "must set EXECSNOOP_PATH env to execsnoop-bpfcc path"
@@ -48,36 +74,20 @@ pub fn watch() -> io::Result<ProcessIterator<impl Iterator<Item = Process> + Sen
     .stderr(Stdio::null())
     .stdin(Stdio::null())
     .spawn()
-    .and_then(|mut child| {
+    .and_then(move |mut child| {
         let stdout = child.stdout.take().ok_or_else(|| {
             let _res = child.kill();
             let _res = child.wait();
             io::Error::new(io::ErrorKind::Other, "execsnoop-bpfcc lacks stdout pipe")
         })?;
 
-        let mut reader = ByteLines::new(BufReader::with_capacity(16 * 1024, stdout));
+        let stream = ByteLines::new(BufReader::with_capacity(16 * 1024, stdout));
 
         Ok(ProcessIterator {
             child,
-            iterator: std::iter::from_fn(move || {
-                while let Some(Ok(line)) = reader.next() {
-                    let mut fields = BStr::new(line).fields();
-
-                    let pid = fields.nth(1);
-                    let parent_pid = fields.next();
-
-                    if let Some((pid, parent_pid)) = pid.zip(parent_pid) {
-                        let pid = atoi::<u32>(pid);
-                        let parent_pid = atoi::<u32>(parent_pid);
-
-                        if let Some((pid, parent_pid)) = pid.zip(parent_pid) {
-                            return Some(Process { pid, parent_pid });
-                        }
-                    }
-                }
-
-                None
-            }),
+            stream,
+            name_buffer: Vec::with_capacity(64),
+            cmd_buffer: Vec::with_capacity(128),
         })
     })
 }

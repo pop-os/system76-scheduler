@@ -50,14 +50,13 @@ process-scheduler enable=true {
 
         // Session services belonging to the user
         session-services nice=9 io="idle" {
-            * cgroup="/user.slice/*.service"
-            * cgroup="/user.slice/*/session.slice/*"
-            * parent="gnome-session-binary"
+            * cgroup="/user.slice/*.service" parent="systemd"
+            * cgroup="/user.slice/*/session.slice/*" parent="systemd"
         }
 
         // System services belonging to root
         system-services nice=12 io="idle" {
-            * cgroup="/system.slice/*.service"
+            * cgroup="/system.slice/*.service" parent="systemd"
         }
 
         // Package management processes
@@ -68,11 +67,19 @@ process-scheduler enable=true {
     }
 
     exceptions {
+        * descends="chrt"
+        * descends="gamemoderun"
+        * descends="ionice"
+        * descends="nice"
+        * descends="taskset"
         chrt
         dbus
+        dbus-broker
+        gamemoderun
         ionice
         nice
         rtkit-daemon
+        systemd
         taskset
     }
 }

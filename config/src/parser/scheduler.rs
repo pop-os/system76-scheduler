@@ -121,7 +121,32 @@ impl Assignments {
         for node in document.nodes() {
             let exception = node.name().value();
 
-            if exception.starts_with('/') {
+            if exception == "*" {
+                let mut condition = Condition::default();
+
+                for (property, entry) in crate::kdl::iter_properties(node) {
+                    match property {
+                        "cgroup" => {
+                            if let Some(value) = entry.value().as_string() {
+                                condition.cgroup = Some(MatchCondition::new(value));
+                            }
+                        }
+                        "descends" => {
+                            if let Some(value) = entry.value().as_string() {
+                                condition.descends = Some(MatchCondition::new(value));
+                            }
+                        }
+                        "parent" => {
+                            if let Some(value) = entry.value().as_string() {
+                                condition.parent = Some(MatchCondition::new(value));
+                            }
+                        }
+                        _ => (),
+                    }
+                }
+
+                self.assign_exception_by_condition(condition);
+            } else if exception.starts_with('/') {
                 self.assign_exception_by_cmdline(exception);
             } else {
                 self.assign_exception_by_name(exception);

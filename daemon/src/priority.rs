@@ -10,9 +10,9 @@ use system76_scheduler_config::scheduler::{Profile, SchedPolicy, SchedPriority};
 use crate::utils::Buffer;
 
 /// Get the priority of a process.
-pub fn get(pid: u32) -> i32 {
-    unsafe { libc::getpriority(libc::PRIO_PROCESS, pid) }
-}
+// pub fn get(pid: u32) -> i32 {
+//     unsafe { libc::getpriority(libc::PRIO_PROCESS, pid) }
+// }
 
 pub fn set(buffer: &mut Buffer, process: u32, profile: &Profile) {
     buffer.path.clear();
@@ -38,12 +38,10 @@ pub fn set(buffer: &mut Buffer, process: u32, profile: &Profile) {
         set_policy(process, profile.sched_policy, profile.sched_priority);
 
         #[allow(clippy::cast_possible_wrap)]
-        if let Err(why) = ioprio::set_priority(
+        let _res = ioprio::set_priority(
             Target::Process(Pid::from_raw(process as i32)),
             ioprio::Priority::new(profile.io),
-        ) {
-            tracing::error!("failed to set ioprio: {:?}", why);
-        }
+        );
     }
 }
 
