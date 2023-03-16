@@ -28,9 +28,11 @@ impl ProcessIterator {
         while let Some(Ok(line)) = self.stream.next() {
             let mut fields = BStr::new(line).fields();
 
-            if let (Some(name), Some(pid), Some(parent_pid), Some(cmd)) =
-                (fields.next(), fields.next(), fields.next(), fields.nth(1))
+            if let (Some(name), Some(pid), Some(parent_pid)) =
+                (fields.next(), fields.next(), fields.next())
             {
+                let cmd = fields.nth(1).unwrap_or_default();
+
                 if let (Some(pid), Some(parent_pid)) = (atoi::<u32>(pid), atoi::<u32>(parent_pid)) {
                     self.name_buffer.clear();
                     self.name_buffer.extend_from_slice(name);

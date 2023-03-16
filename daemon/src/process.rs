@@ -158,3 +158,15 @@ pub fn name(buffer: &mut Buffer, pid: u32) -> Option<&str> {
     crate::utils::file_key(&mut buffer.file_raw, path, "Name:")
         .and_then(|name| std::str::from_utf8(name).ok())
 }
+
+pub fn parent_id(buffer: &mut Buffer, pid: u32) -> Option<u32> {
+    buffer.path.clear();
+
+    let path = strcat!(&mut buffer.path, "/proc/" buffer.itoa.format(pid) "/status");
+
+    if let Some(value) = crate::utils::file_key(&mut buffer.file_raw, path, "PPid:") {
+        return atoi::atoi::<u32>(value);
+    }
+
+    None
+}
