@@ -147,7 +147,14 @@ pub fn cmdline(buffer: &mut Buffer, pid: u32) -> Option<String> {
         return None;
     };
 
-    Some(exe.as_os_str().to_string_lossy().to_string())
+    Some(
+        exe.as_os_str()
+            .to_string_lossy()
+            .split_whitespace()
+            .next()
+            .map(String::from)
+            .unwrap_or_default(),
+    )
 }
 
 pub fn name(buffer: &mut Buffer, pid: u32) -> Option<&str> {
