@@ -42,21 +42,23 @@ process-scheduler enable=true {
         // Desktop environments
         desktop-environment nice=-3 io=(best-effort)0
 
-        // Processes running in the foreground
+        // Foreground process profile
         foreground nice=0 io=(best-effort)0
 
-        // Processes running in the background
+        // Background process profile
         background nice=6 io="idle"
 
         // Session services belonging to the user
         session-services nice=9 io="idle" {
             * cgroup="/user.slice/*.service" parent="systemd"
             * cgroup="/user.slice/*/session.slice/*" parent="systemd"
+            * cgroup="/user.slice/user-*.slice/sssion-*.scope"
+            * parent="gnome-session-binary" parent="gvfsd"
         }
 
         // System services belonging to root
         system-services nice=12 io="idle" {
-            * cgroup="/system.slice/*.service" parent="systemd"
+            * cgroup="/system.slice/*"
         }
 
         // Package management processes

@@ -5,7 +5,7 @@ use crate::cfs::paths::SchedPaths;
 use crate::config::scheduler::Profile;
 use crate::process::{self, Process};
 use crate::utils::Buffer;
-use qcell::LCellOwner;
+use qcell::{LCell, LCellOwner};
 use std::collections::BTreeMap;
 use std::time::Duration;
 use std::{os::unix::prelude::OsStrExt, sync::Arc};
@@ -63,9 +63,58 @@ impl<'owner> Service<'owner> {
             .unwrap_or(&crate::config::cfs::PROFILE_RESPONSIVE)
     }
 
+    /// Assign a priority to a newly-created process, and record that process in the map.
+    pub fn assign_new_process(
+        &mut self,
+        buffer: &mut Buffer,
+        pid: u32,
+        mut parent_pid: u32,
+        name: String,
+        mut cmdline: String,
+    ) {
+        let mut attempts = 0;
+        while cmdline.is_empty() && attempts < 3 {
+            std::thread::sleep(Duration::from_secs(1));
+            cmdline = process::cmdline(buffer, pid)
+                .map(String::from)
+                .unwrap_or_default();
+            attempts += 1;
+        }
+
+        let mut parent = self.process_map.get_pid(&self.owner, parent_pid).cloned();
+
+        if parent.is_none() {
+            if let Some(pid) = process::parent_id(buffer, pid) {
+                parent_pid = pid;
+                if let Some(cmdline) = process::cmdline(buffer, pid) {
+                    let name = process::name(&cmdline);
+                    if let Some(parent_pid) = process::parent_id(buffer, pid) {
+                        self.assign_new_process(buffer, pid, parent_pid, name.to_owned(), cmdline);
+                        parent = self.process_map.get_pid(&self.owner, pid).cloned();
+                    }
+                }
+            }
+        }
+
+        // Add the process to the map, if it does not already exist.
+        let process = self.process_map_insert(Process {
+            id: pid,
+            parent_id: parent_pid,
+            cgroup: process::cgroup(buffer, pid)
+                .map(String::from)
+                .unwrap_or_default(),
+            cmdline,
+            name,
+            parent: parent.as_ref().map(Arc::downgrade),
+            ..Process::default()
+        });
+
+        self.process_assign(buffer, process.ro(&self.owner));
+    }
+
     /// Gets the config-assigned priority of a process.
     #[must_use]
-    pub fn assigned_priority(&self, pid: u32) -> Priority {
+    pub fn process_assignment(&self, pid: u32) -> Priority {
         let Some(process) = self.process_map.get_pid(&self.owner, pid) else {
             return Priority::NotAssignable;
         };
@@ -101,23 +150,30 @@ impl<'owner> Service<'owner> {
                 }
             }
 
-            if let Some(ref parent_condition) = condition.parent {
+            if !condition.parent.is_empty() {
+                let mut has_parent = false;
+
                 if let Some(parent) = process.parent() {
                     let parent = parent.ro(&self.owner);
-                    if !parent_condition.matches(&parent.name) {
-                        continue;
-                    }
-                } else {
+                    has_parent = condition
+                        .parent
+                        .iter()
+                        .any(|condition| condition.matches(&parent.name));
+                }
+
+                if !has_parent {
                     continue;
                 }
             }
 
             if let Some(ref descends_condition) = condition.descends {
-                for parent in process.ancestors(&self.owner) {
+                let is_ancestor = process.ancestors(&self.owner).any(|parent| {
                     let parent = parent.ro(&self.owner);
-                    if descends_condition.matches(&parent.name) {
-                        continue;
-                    }
+                    descends_condition.matches(&parent.name)
+                });
+
+                if !is_ancestor {
+                    continue;
                 }
             }
 
@@ -125,97 +181,6 @@ impl<'owner> Service<'owner> {
         }
 
         Priority::Assignable
-    }
-
-    /// Assign a priority to a newly-created process, and record that process in the map.
-    pub fn assign_new_process(
-        &mut self,
-        buffer: &mut Buffer,
-        pid: u32,
-        mut parent_pid: u32,
-        name: String,
-        mut cmdline: String,
-    ) {
-        let mut attempts = 0;
-        while cmdline.is_empty() && attempts < 3 {
-            std::thread::sleep(Duration::from_secs(1));
-            cmdline = process::cmdline(buffer, pid)
-                .map(String::from)
-                .unwrap_or_default();
-            attempts += 1;
-        }
-
-        let mut parent = self.process_map.get_pid(&self.owner, parent_pid).cloned();
-
-        if parent.is_none() {
-            if let Some(pid) = process::parent_id(buffer, pid) {
-                parent_pid = pid;
-                if let Some(name) = process::name(buffer, pid).map(String::from) {
-                    let cmdline = process::cmdline(buffer, pid)
-                        .map(String::from)
-                        .unwrap_or_default();
-                    if let Some(parent_pid) = process::parent_id(buffer, pid) {
-                        self.assign_new_process(buffer, pid, parent_pid, name, cmdline);
-                        parent = self.process_map.get_pid(&self.owner, pid).cloned();
-                    }
-                }
-            }
-        }
-
-        if parent.is_none() {
-            return;
-        }
-
-        // Add the process to the map, if it does not already exist.
-        self.insert_process(Process {
-            id: pid,
-            parent_id: parent_pid,
-            cgroup: process::cgroup(buffer, pid)
-                .map(String::from)
-                .unwrap_or_default(),
-            cmdline,
-            name,
-            parent: parent.as_ref().map(Arc::downgrade),
-            ..Process::default()
-        });
-
-        match self.assigned_priority(pid) {
-            // Apply preferred config
-            Priority::Config(config) => {
-                crate::priority::set(buffer, pid, config);
-            }
-
-            // When foreground process management is enabled, apply it.
-            Priority::Assignable => {
-                if let Some(foreground) = self.foreground {
-                    if let Some(ref assignments) = self.config.process_scheduler.foreground {
-                        if let Some(process) = self.process_map.get_pid(&self.owner, pid) {
-                            let process = process.ro(&self.owner);
-
-                            let profile = if pid == foreground
-                                || self.process_descended_from(process, foreground)
-                            {
-                                self.foreground_processes.push(process.id);
-                                &assignments.foreground
-                            } else {
-                                &assignments.background
-                            };
-
-                            crate::priority::set(buffer, pid, profile);
-                        }
-                    }
-                }
-            }
-
-            _ => (),
-        }
-    }
-
-    pub fn insert_process(&mut self, process: Process<'owner>) {
-        let process = self.process_map.insert(&mut self.owner, process);
-        if self.process_is_exception(process.ro(&self.owner)) {
-            process.rw(&mut self.owner).exception = true;
-        }
     }
 
     // Check if the `process` has descended from the `ancestor`
@@ -270,10 +235,12 @@ impl<'owner> Service<'owner> {
             }
 
             // Checks if a process has a direct parent of the same name.
-            if let Some(condition) = &condition.parent {
-                let parent_match = process.parent().map_or(false, |parent| {
-                    let parent = parent.ro(&self.owner);
-                    condition.matches(&parent.name) || condition.matches(&parent.forked_name)
+            if !condition.parent.is_empty() {
+                let parent_match = condition.parent.iter().any(|condition| {
+                    process.parent().map_or(false, |parent| {
+                        let parent = parent.ro(&self.owner);
+                        condition.matches(&parent.name) || condition.matches(&parent.forked_name)
+                    })
                 });
 
                 if !parent_match {
@@ -287,13 +254,57 @@ impl<'owner> Service<'owner> {
         false
     }
 
-    /// Reloads the configuration files.
-    pub fn reload_configuration(&mut self) {
-        self.config = crate::config::config();
+    pub fn process_assign(&self, buffer: &mut Buffer, process: &Process<'owner>) {
+        let profile_default;
+
+        let profile = match self.process_assignment(process.id) {
+            Priority::Assignable => {
+                if let Some(ref profile) = self.config.process_scheduler.pipewire {
+                    if self.pipewire_processes.contains(&process.id) {
+                        crate::priority::set(buffer, process.id, profile);
+                        return;
+                    }
+                }
+
+                if let (Some(assignments), Some(foreground)) =
+                    (&self.config.process_scheduler.foreground, &self.foreground)
+                {
+                    if process.id == *foreground || self.foreground_processes.contains(&process.id)
+                    {
+                        &assignments.foreground
+                    } else {
+                        &assignments.background
+                    }
+                } else {
+                    profile_default = Profile::default();
+                    &profile_default
+                }
+            }
+
+            Priority::Config(profile) => profile,
+
+            _ => return,
+        };
+
+        crate::priority::set(buffer, process.id, profile);
+    }
+
+    /// Adds a new process to the process map
+    pub fn process_map_insert(
+        &mut self,
+        process: Process<'owner>,
+    ) -> Arc<LCell<'owner, Process<'owner>>> {
+        let process = self.process_map.insert(&mut self.owner, process);
+
+        if self.process_is_exception(process.ro(&self.owner)) {
+            process.rw(&mut self.owner).exception = true;
+        }
+
+        process
     }
 
     /// Refreshes the process map
-    pub fn refresh_process_map(&mut self, buffer: &mut Buffer) {
+    pub async fn process_map_refresh(&mut self, buffer: &mut Buffer) {
         self.process_map.drain_filter_prepare();
 
         let mut parents = BTreeMap::new();
@@ -318,21 +329,19 @@ impl<'owner> Service<'owner> {
                 None => continue,
             }
 
-            if let Some(name) = process::name(buffer, process.id) {
-                process.name = name.to_owned();
+            process.name = process::name(&process.cmdline).to_owned();
 
-                if let Some(cgroup) = process::cgroup(buffer, process.id) {
-                    process.cgroup = cgroup.to_owned();
-                }
-
-                if let Some(ppid) = process::parent_id(buffer, process.id) {
-                    parents.insert(process.id, ppid);
-                    process.parent_id = ppid;
-                }
-
-                self.process_map.retain_process_tree(&self.owner, &process);
-                self.insert_process(process);
+            if let Some(cgroup) = process::cgroup(buffer, process.id) {
+                process.cgroup = cgroup.to_owned();
             }
+
+            if let Some(ppid) = process::parent_id(buffer, process.id) {
+                parents.insert(process.id, ppid);
+                process.parent_id = ppid;
+            }
+
+            self.process_map.retain_process_tree(&self.owner, &process);
+            self.process_map_insert(process);
         }
 
         for (pid, ppid) in parents {
@@ -344,6 +353,22 @@ impl<'owner> Service<'owner> {
         }
 
         self.process_map.drain_filter();
+
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        for process in self.process_map.map.values() {
+            self.process_assign(buffer, process.ro(&self.owner));
+        }
+
+        // Reassign foreground processes in case they were overriden.
+        if let Some(process) = self.foreground.take() {
+            self.set_foreground_process(buffer, process);
+        }
+    }
+
+    /// Reloads the configuration files.
+    pub fn reload_configuration(&mut self) {
+        self.config = crate::config::config();
     }
 
     /// Sets a process as the foreground.
@@ -354,7 +379,7 @@ impl<'owner> Service<'owner> {
 
             if !self.pipewire_processes.contains(&pid) {
                 if let Some(priority) = self
-                    .assigned_priority(pid)
+                    .process_assignment(pid)
                     .with_default(&assignments.foreground)
                 {
                     crate::priority::set(buffer, pid, priority);
@@ -370,7 +395,7 @@ impl<'owner> Service<'owner> {
                     continue;
                 }
 
-                if let Priority::Assignable = self.assigned_priority(process.id) {
+                if let Priority::Assignable = self.process_assignment(process.id) {
                     let profile = if self.process_descended_from(process, pid) {
                         self.foreground_processes.push(process.id);
 
@@ -401,7 +426,7 @@ impl<'owner> Service<'owner> {
             if !self.pipewire_processes.contains(&process.id) {
                 self.pipewire_processes.push(process.id);
 
-                if let Priority::Assignable = self.assigned_priority(process.id) {
+                if let Priority::Assignable = self.process_assignment(process.id) {
                     crate::priority::set(buffer, process.id, &pipewire);
                 }
             }
@@ -419,7 +444,7 @@ impl<'owner> Service<'owner> {
         self.pipewire_processes.remove(index);
 
         if let Some(ref assignments) = self.config.process_scheduler.foreground {
-            if let Priority::Assignable = self.assigned_priority(process_id) {
+            if let Priority::Assignable = self.process_assignment(process_id) {
                 let profile = if self.foreground_processes.contains(&process_id) {
                     &assignments.foreground
                 } else {
@@ -428,39 +453,6 @@ impl<'owner> Service<'owner> {
 
                 crate::priority::set(buffer, process_id, profile);
             }
-        }
-    }
-
-    /// Updates the list of assignable processes, and reassigns priorities.
-    pub fn assign_process_map_priorities(&mut self, buffer: &mut Buffer) {
-        for process in self.process_map.map.values() {
-            let process = process.ro(&self.owner);
-
-            if self.pipewire_processes.contains(&process.id)
-                || self.foreground_processes.contains(&process.id)
-            {
-                continue;
-            }
-
-            match self.assigned_priority(process.id) {
-                // If enabled, assign background priority to all processes
-                Priority::Assignable => {
-                    if let Some(ref assignments) = self.config.process_scheduler.foreground {
-                        crate::priority::set(buffer, process.id, &assignments.background);
-                    }
-                }
-
-                Priority::Config(profile) => {
-                    crate::priority::set(buffer, process.id, profile);
-                }
-
-                _ => (),
-            }
-        }
-
-        // Reassign foreground processes in case they were overriden.
-        if let Some(process) = self.foreground.take() {
-            self.set_foreground_process(buffer, process);
         }
     }
 }

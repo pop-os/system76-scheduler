@@ -88,8 +88,10 @@ impl Assignments {
                                         entry.value().as_string().map(MatchCondition::new);
                                 }
                                 "parent" => {
-                                    condition.parent =
-                                        entry.value().as_string().map(MatchCondition::new);
+                                    if let Some(parent) = entry.value().as_string() {
+                                        tracing::info!("assigning parent: {parent}");
+                                        condition.parent.push(MatchCondition::new(parent));
+                                    }
                                 }
                                 _ => {
                                     tracing::error!("unknown property: {}", property);
@@ -97,7 +99,11 @@ impl Assignments {
                             }
                         }
 
-                        if condition.cgroup.is_some() || condition.parent.is_some() {
+                        if condition.cgroup.is_some() || !condition.parent.is_empty() {
+                            tracing::info!(
+                                "{name} has {} parent conditions",
+                                condition.parent.len()
+                            );
                             self.assign_by_condition(condition, profile);
                         }
                     } else {
@@ -138,7 +144,7 @@ impl Assignments {
                         }
                         "parent" => {
                             if let Some(value) = entry.value().as_string() {
-                                condition.parent = Some(MatchCondition::new(value));
+                                condition.parent.push(MatchCondition::new(value));
                             }
                         }
                         _ => (),

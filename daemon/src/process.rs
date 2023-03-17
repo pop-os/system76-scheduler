@@ -157,13 +157,8 @@ pub fn cmdline(buffer: &mut Buffer, pid: u32) -> Option<String> {
     )
 }
 
-pub fn name(buffer: &mut Buffer, pid: u32) -> Option<&str> {
-    buffer.path.clear();
-
-    let path = strcat!(&mut buffer.path, "/proc/" buffer.itoa.format(pid) "/status");
-
-    crate::utils::file_key(&mut buffer.file_raw, path, "Name:")
-        .and_then(|name| std::str::from_utf8(name).ok())
+pub fn name(cmdline: &str) -> &str {
+    cmdline.rsplit('/').next().unwrap_or(cmdline)
 }
 
 pub fn parent_id(buffer: &mut Buffer, pid: u32) -> Option<u32> {

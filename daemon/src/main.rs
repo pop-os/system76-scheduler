@@ -246,9 +246,7 @@ async fn daemon(
             }
 
             Event::RefreshProcessMap => {
-                service.refresh_process_map(&mut buffer);
-                tokio::time::sleep(Duration::from_secs(1)).await;
-                service.assign_process_map_priorities(&mut buffer);
+                service.process_map_refresh(&mut buffer).await;
             }
 
             Event::SetForegroundProcess(pid) => {
