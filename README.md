@@ -18,7 +18,7 @@ The configuration file is stored at the following locations:
 - System: `/etc/system76-scheduler/config.kdl`
 - Distribution: `/usr/share/system76-scheduler/config.kdl`
 
-Presence of the system configuration will override the distribution configuration. The documented [default configuration can be found at here](./data/config.kdl).
+Presence of the system configuration will override the distribution configuration. The documented [default configuration can be found here](./data/config.kdl).
 
 Note that if the `background` and `foreground` assignment profiles are defined, then foreground process management will be enabled. Likewise, if a `pipewire` profile is defined, then pipewire process monitoring will be enabled.
 
@@ -63,7 +63,7 @@ The `profile-properties` may contain any of
 
 ### Assignments
 
-Children of the profile define what processes to assign to it
+Each child element of a profile defines th process(es) to assign to the profile.
 
 ```kdl
 {{profile-name}} {{profile-properties}} {
