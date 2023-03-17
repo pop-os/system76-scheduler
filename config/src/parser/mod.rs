@@ -90,6 +90,7 @@ fn read_main(buffer: &mut String) -> Config {
             }
             "cfs-profiles" => config.cfs_profiles.read(node),
             "process-scheduler" => config.process_scheduler.read(node),
+            "version" => (),
             other => {
                 tracing::warn!("unknown element: {}", other);
             }
