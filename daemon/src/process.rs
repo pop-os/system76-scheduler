@@ -7,6 +7,7 @@ use std::{
         HashMap, HashSet,
     },
     hash::{Hash, Hasher},
+    path::Path,
     sync::{Arc, Weak},
 };
 
@@ -155,6 +156,11 @@ pub fn cmdline(buffer: &mut Buffer, pid: u32) -> Option<String> {
             .map(String::from)
             .unwrap_or_default(),
     )
+}
+
+pub fn exists(buffer: &mut Buffer, pid: u32) -> bool {
+    buffer.path.clear();
+    Path::new(strcat!(&mut buffer.path, "/proc/" buffer.itoa.format(pid) "/status")).exists()
 }
 
 pub fn name(cmdline: &str) -> &str {

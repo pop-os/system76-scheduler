@@ -79,8 +79,33 @@ impl<'owner> Service<'owner> {
             return;
         }
 
-        if cmdline.is_empty() {
+        if !process::exists(buffer, pid) {
+            return;
+        }
+
+        let mut attempts = 0;
+
+        if cmdline.is_empty() || attempts < 0 {
             cmdline = process::cmdline(buffer, pid).unwrap_or_default();
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            if !process::exists(buffer, pid) {
+                return;
+            }
+            attempts += 1;
+        }
+
+        let mut cgroup = String::new();
+        attempts = 0;
+
+        while cgroup.is_empty() || attempts < 4 {
+            cgroup = process::cgroup(buffer, pid)
+                .map(String::from)
+                .unwrap_or_default();
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            if !process::exists(buffer, pid) {
+                return;
+            }
+            attempts += 1;
         }
 
         // Add the process to the map, if it does not already exist.
