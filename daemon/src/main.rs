@@ -242,7 +242,9 @@ async fn daemon(
                 cmdline,
             } => {
                 tokio::time::sleep_until(tokio::time::Instant::from_std(when)).await;
-                service.assign_new_process(&mut buffer, pid, parent_pid, name, cmdline);
+                service
+                    .assign_new_process(&mut buffer, pid, parent_pid, name, cmdline)
+                    .await;
             }
 
             Event::RefreshProcessMap => {

@@ -12,14 +12,14 @@ use std::{
 
 #[derive(Default)]
 pub struct Process<'owner> {
+    pub id: u32,
+    pub parent_id: u32,
+    pub name: String,
     pub cgroup: String,
     pub cmdline: String,
-    pub exception: bool,
     pub forked_cmdline: String,
     pub forked_name: String,
-    pub id: u32,
-    pub name: String,
-    pub parent_id: u32,
+    pub exception: bool,
     pub parent: Option<Weak<LCell<'owner, Process<'owner>>>>,
 }
 

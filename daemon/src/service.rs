@@ -64,36 +64,23 @@ impl<'owner> Service<'owner> {
     }
 
     /// Assign a priority to a newly-created process, and record that process in the map.
-    pub fn assign_new_process(
+    pub async fn assign_new_process(
         &mut self,
         buffer: &mut Buffer,
         pid: u32,
-        mut parent_pid: u32,
+        parent_pid: u32,
         name: String,
         mut cmdline: String,
     ) {
-        let mut attempts = 0;
-        while cmdline.is_empty() && attempts < 3 {
-            std::thread::sleep(Duration::from_secs(1));
-            cmdline = process::cmdline(buffer, pid)
-                .map(String::from)
-                .unwrap_or_default();
-            attempts += 1;
-        }
-
-        let mut parent = self.process_map.get_pid(&self.owner, parent_pid).cloned();
+        let parent = self.process_map.get_pid(&self.owner, parent_pid).cloned();
 
         if parent.is_none() {
-            if let Some(pid) = process::parent_id(buffer, pid) {
-                parent_pid = pid;
-                if let Some(cmdline) = process::cmdline(buffer, pid) {
-                    let name = process::name(&cmdline);
-                    if let Some(parent_pid) = process::parent_id(buffer, pid) {
-                        self.assign_new_process(buffer, pid, parent_pid, name.to_owned(), cmdline);
-                        parent = self.process_map.get_pid(&self.owner, pid).cloned();
-                    }
-                }
-            }
+            self.process_map_refresh(buffer).await;
+            return;
+        }
+
+        if cmdline.is_empty() {
+            cmdline = process::cmdline(buffer, pid).unwrap_or_default();
         }
 
         // Add the process to the map, if it does not already exist.
