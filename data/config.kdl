@@ -53,15 +53,17 @@ process-scheduler enable=true {
 
         // Session services belonging to the user
         session-services nice=9 io="idle" {
-            * cgroup="/user.slice/*.service" parent="systemd"
-            * cgroup="/user.slice/*/session.slice/*" parent="systemd"
-            * cgroup="/user.slice/user-*.slice/sssion-*.scope"
-            * parent="gnome-session-binary" parent="gvfsd"
+            include cgroup="/user.slice/*.service" parent="systemd"
+            include cgroup="/user.slice/*/session.slice/*" parent="systemd"
+            include cgroup="/user.slice/user-*.slice/sssion-*.scope"
+            include parent="gnome-session-binary"
+            include parent="gvfsd"
+            exclude cgroup="/user.slice/*app-dbus*"
         }
 
         // System services belonging to root
         system-services nice=12 io="idle" {
-            * cgroup="/system.slice/*"
+            include cgroup="/system.slice/*"
         }
 
         // Package management processes
@@ -72,11 +74,11 @@ process-scheduler enable=true {
     }
 
     exceptions {
-        * descends="chrt"
-        * descends="gamemoderun"
-        * descends="ionice"
-        * descends="nice"
-        * descends="taskset"
+        include descends="chrt"
+        include descends="gamemoderun"
+        include descends="ionice"
+        include descends="nice"
+        include descends="taskset"
         chrt
         dbus
         dbus-broker

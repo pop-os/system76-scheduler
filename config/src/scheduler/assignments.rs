@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use super::Profile;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use wildmatch::WildMatch;
 
 #[derive(Default, Debug)]
@@ -39,7 +39,7 @@ impl MatchCondition {
 
 #[derive(Default, Debug)]
 pub struct Assignments {
-    pub conditions: Vec<(Condition, Profile)>,
+    pub conditions: HashMap<Box<str>, (Profile, Vec<(Condition, bool)>)>,
     pub(crate) exceptions_by_name: BTreeSet<Box<str>>,
     pub(crate) exceptions_by_cmdline: BTreeSet<Box<str>>,
     pub exceptions_conditions: Vec<Condition>,
@@ -92,8 +92,18 @@ impl Assignments {
         self.profile_by_name.insert(name.into(), profile);
     }
 
-    pub fn assign_by_condition(&mut self, condition: Condition, profile: Profile) {
-        self.conditions.push((condition, profile));
+    pub fn assign_by_condition(
+        &mut self,
+        name: &str,
+        condition: Condition,
+        profile: Profile,
+        include: bool,
+    ) {
+        self.conditions
+            .entry(name.into())
+            .or_insert_with(|| (profile, Vec::new()))
+            .1
+            .push((condition, include));
     }
 
     pub fn assign_by_cmdline(&mut self, name: &str, profile: Profile) {

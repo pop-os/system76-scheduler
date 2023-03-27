@@ -18,8 +18,8 @@ assignments {
 		vrdashboard
 		vrmonitor
 		vrserver
-		* parent="steam"
-		* parent="lutris"
+		include descends="steam"
+		include descends="lutris"
 	}
 
 	desktop-environment {

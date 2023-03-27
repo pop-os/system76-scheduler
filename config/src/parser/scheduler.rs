@@ -47,6 +47,13 @@ impl Config {
 
 impl Assignments {
     pub fn parse(&mut self, node: &KdlNode) {
+        #[derive(PartialEq, Eq)]
+        enum ParseCondition {
+            Include,
+            Exclude,
+            Name,
+        }
+
         let Some(document) = node.children() else {
             return;
         };
@@ -75,43 +82,57 @@ impl Assignments {
                     let span = tracing::warn_span!("assignment", number = number + 1, name);
                     let _entered = span.enter();
 
-                    if name == "*" {
-                        let mut condition = Condition::default();
-                        let mut profile = profile.clone();
+                    let parse_condition = match name {
+                        "include" => ParseCondition::Include,
+                        "exclude" => ParseCondition::Exclude,
+                        _ => ParseCondition::Name,
+                    };
 
-                        for (property, entry) in
-                            profile.parse_properties(crate::kdl::iter_properties(pattern))
-                        {
-                            match property {
-                                "cgroup" => {
-                                    condition.cgroup =
-                                        entry.value().as_string().map(MatchCondition::new);
-                                }
-                                "parent" => {
-                                    if let Some(parent) = entry.value().as_string() {
-                                        tracing::info!("assigning parent: {parent}");
-                                        condition.parent.push(MatchCondition::new(parent));
+                    match parse_condition {
+                        ParseCondition::Include | ParseCondition::Exclude => {
+                            let mut condition = Condition::default();
+                            let mut profile = profile.clone();
+
+                            for (property, entry) in
+                                profile.parse_properties(crate::kdl::iter_properties(pattern))
+                            {
+                                match property {
+                                    "cgroup" => {
+                                        condition.cgroup =
+                                            entry.value().as_string().map(MatchCondition::new);
+                                    }
+                                    "descends" => {
+                                        condition.descends =
+                                            entry.value().as_string().map(MatchCondition::new);
+                                    }
+                                    "parent" => {
+                                        if let Some(parent) = entry.value().as_string() {
+                                            condition.parent.push(MatchCondition::new(parent));
+                                        }
+                                    }
+                                    _ => {
+                                        tracing::error!("unknown property: {}", property);
                                     }
                                 }
-                                _ => {
-                                    tracing::error!("unknown property: {}", property);
-                                }
+                            }
+
+                            if condition.cgroup.is_some() || !condition.parent.is_empty() {
+                                self.assign_by_condition(
+                                    profile_name,
+                                    condition,
+                                    profile,
+                                    ParseCondition::Include == parse_condition,
+                                );
                             }
                         }
 
-                        if condition.cgroup.is_some() || !condition.parent.is_empty() {
-                            tracing::info!(
-                                "{name} has {} parent conditions",
-                                condition.parent.len()
-                            );
-                            self.assign_by_condition(condition, profile);
-                        }
-                    } else {
-                        let profile = profile.clone().parse(pattern);
-                        if name.starts_with('/') {
-                            self.assign_by_cmdline(name, profile);
-                        } else {
-                            self.assign_by_name(name, profile);
+                        ParseCondition::Name => {
+                            let profile = profile.clone().parse(pattern);
+                            if name.starts_with('/') {
+                                self.assign_by_cmdline(name, profile);
+                            } else {
+                                self.assign_by_name(name, profile);
+                            }
                         }
                     }
                 }
@@ -127,7 +148,7 @@ impl Assignments {
         for node in document.nodes() {
             let exception = node.name().value();
 
-            if exception == "*" {
+            if exception == "include" {
                 let mut condition = Condition::default();
 
                 for (property, entry) in crate::kdl::iter_properties(node) {

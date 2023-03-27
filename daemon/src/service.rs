@@ -9,6 +9,7 @@ use qcell::{LCell, LCellOwner};
 use std::collections::BTreeMap;
 use std::time::Duration;
 use std::{os::unix::prelude::OsStrExt, sync::Arc};
+use system76_scheduler_config::scheduler::Condition;
 
 pub struct Service<'owner> {
     pub config: crate::config::Config,
@@ -85,7 +86,7 @@ impl<'owner> Service<'owner> {
 
         let mut attempts = 0;
 
-        if cmdline.is_empty() || attempts < 0 {
+        while cmdline.is_empty() || attempts < 4 {
             cmdline = process::cmdline(buffer, pid).unwrap_or_default();
             tokio::time::sleep(Duration::from_secs(1)).await;
             if !process::exists(buffer, pid) {
@@ -155,10 +156,11 @@ impl<'owner> Service<'owner> {
             return Priority::Config(profile);
         }
 
-        for (condition, profile) in &self.config.process_scheduler.assignments.conditions {
+        // True when all conditions for a profile are met by a process.
+        let condition_met = |condition: &Condition| {
             if let Some(ref cgroup) = condition.cgroup {
                 if !cgroup.matches(&process.cgroup) {
-                    continue;
+                    return false;
                 }
             }
 
@@ -174,7 +176,7 @@ impl<'owner> Service<'owner> {
                 }
 
                 if !has_parent {
-                    continue;
+                    return false;
                 }
             }
 
@@ -185,11 +187,35 @@ impl<'owner> Service<'owner> {
                 });
 
                 if !is_ancestor {
-                    continue;
+                    return false;
                 }
             }
 
-            return Priority::Config(profile);
+            true
+        };
+
+        'outer: for (profile, conditions) in self
+            .config
+            .process_scheduler
+            .assignments
+            .conditions
+            .values()
+        {
+            let mut assigned_profile = None;
+
+            for (condition, include) in conditions {
+                match (condition_met(condition), *include) {
+                    // Condition met for an include rule
+                    (true, true) => assigned_profile = Some(profile),
+                    // Condition met for an exclude rule
+                    (true, false) => continue 'outer,
+                    _ => (),
+                }
+            }
+
+            if let Some(profile) = assigned_profile.take() {
+                return Priority::Config(profile);
+            }
         }
 
         Priority::Assignable
