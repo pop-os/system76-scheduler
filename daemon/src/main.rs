@@ -33,13 +33,7 @@ use crate::utils::Buffer;
 
 #[derive(Debug)]
 enum Event {
-    ExecCreate {
-        when: Instant,
-        pid: u32,
-        parent_pid: u32,
-        name: String,
-        cmdline: String,
-    },
+    ExecCreate(ExecCreate),
     OnBattery(bool),
     Pipewire(scheduler_pipewire::ProcessEvent),
     RefreshProcessMap,
@@ -47,6 +41,14 @@ enum Event {
     SetCpuMode,
     SetCustomCpuMode,
     SetForegroundProcess(u32),
+}
+
+#[derive(Debug)]
+struct ExecCreate {
+    pid: u32,
+    parent_pid: u32,
+    name: String,
+    cmdline: String,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -190,6 +192,7 @@ async fn daemon(
         if service.config.process_scheduler.execsnoop {
             tracing::debug!("monitoring process IDs in realtime with execsnoop");
             let tx = tx.clone();
+            let (scheduled_tx, mut scheduled_rx) = tokio::sync::mpsc::channel(1);
             std::thread::spawn(move || {
                 if let Ok(mut watcher) = execsnoop::watch() {
                     // Listen for spawned process, scheduling them to be handled with a delay of 1 second after creation.
@@ -199,15 +202,24 @@ async fn daemon(
                             std::str::from_utf8(process.name),
                             std::str::from_utf8(process.cmd),
                         ) {
-                            let _res = tx.blocking_send(Event::ExecCreate {
-                                when: Instant::now() + Duration::from_secs(1),
-                                pid: process.pid,
-                                parent_pid: process.parent_pid,
-                                name: name.to_owned(),
-                                cmdline: cmdline.to_owned(),
-                            });
+                            let _res = scheduled_tx.blocking_send((
+                                Instant::now() + Duration::from_secs(1),
+                                ExecCreate {
+                                    pid: process.pid,
+                                    parent_pid: process.parent_pid,
+                                    name: name.to_owned(),
+                                    cmdline: cmdline.to_owned(),
+                                },
+                            ));
                         }
                     }
+                }
+            });
+
+            tokio::task::spawn_local(async move {
+                while let Some((delay, process)) = scheduled_rx.recv().await {
+                    tokio::time::sleep_until(delay.into()).await;
+                    let _res = tx.send(Event::ExecCreate(process)).await;
                 }
             });
         }
@@ -234,21 +246,19 @@ async fn daemon(
 
     while let Some(event) = rx.recv().await {
         match event {
-            Event::ExecCreate {
-                when,
+            Event::ExecCreate(ExecCreate {
                 pid,
                 parent_pid,
                 name,
                 cmdline,
-            } => {
-                tokio::time::sleep_until(tokio::time::Instant::from_std(when)).await;
+            }) => {
                 service
                     .assign_new_process(&mut buffer, pid, parent_pid, name, cmdline)
                     .await;
             }
 
             Event::RefreshProcessMap => {
-                service.process_map_refresh(&mut buffer).await;
+                service.process_map_refresh(&mut buffer);
             }
 
             Event::SetForegroundProcess(pid) => {

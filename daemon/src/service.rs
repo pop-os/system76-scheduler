@@ -76,7 +76,7 @@ impl<'owner> Service<'owner> {
         let parent = self.process_map.get_pid(&self.owner, parent_pid).cloned();
 
         if parent.is_none() {
-            self.process_map_refresh(buffer).await;
+            self.process_map_refresh(buffer);
             return;
         }
 
@@ -345,7 +345,7 @@ impl<'owner> Service<'owner> {
     }
 
     /// Refreshes the process map
-    pub async fn process_map_refresh(&mut self, buffer: &mut Buffer) {
+    pub fn process_map_refresh(&mut self, buffer: &mut Buffer) {
         self.process_map.drain_filter_prepare();
 
         let mut parents = BTreeMap::new();
@@ -394,8 +394,6 @@ impl<'owner> Service<'owner> {
         }
 
         self.process_map.drain_filter();
-
-        tokio::time::sleep(Duration::from_secs(1)).await;
 
         // Refresh priority assignments
         let mut process_map = process::Map::default();
