@@ -91,7 +91,7 @@ impl<'owner> Service<'owner> {
         let mut cgroup = String::new();
         let mut attempts = 0;
 
-        while cgroup.is_empty() || attempts < 4 {
+        while cgroup.is_empty() || attempts < 2 {
             cgroup = process::cgroup(buffer, pid)
                 .map(String::from)
                 .unwrap_or_default();
@@ -103,19 +103,23 @@ impl<'owner> Service<'owner> {
         }
 
         // Add the process to the map, if it does not already exist.
-        let process = self.process_map_insert(Process {
-            id: pid,
-            parent_id: parent_pid,
-            cgroup: process::cgroup(buffer, pid)
-                .map(String::from)
-                .unwrap_or_default(),
-            cmdline,
-            name,
-            parent: parent.as_ref().map(Arc::downgrade),
-            ..Process::default()
-        });
+        let process = self.process_map.insert(
+            &mut self.owner,
+            Process {
+                id: pid,
+                parent_id: parent_pid,
+                cgroup: process::cgroup(buffer, pid)
+                    .map(String::from)
+                    .unwrap_or_default(),
+                cmdline,
+                name,
+                parent: parent.as_ref().map(Arc::downgrade),
+                ..Process::default()
+            },
+        );
 
-        self.process_assign(buffer, process.ro(&self.owner));
+        self.assign_process_priority(&process);
+        self.apply_process_priority(buffer, process.ro(&self.owner));
     }
 
     /// Gets the config-assigned priority of a process.
@@ -125,93 +129,105 @@ impl<'owner> Service<'owner> {
             return Priority::NotAssignable;
         };
 
-        let process = process.ro(&self.owner);
+        process.ro(&self.owner).assigned_priority.as_ref()
+    }
 
-        if process.exception {
-            return Priority::Exception;
+    pub fn assign_process_priority(&mut self, process: &LCell<'owner, Process<'owner>>) {
+        if OwnedPriority::NotAssignable != process.ro(&self.owner).assigned_priority {
+            return;
         }
 
-        if let Some(profile) = self
-            .config
-            .process_scheduler
-            .assignments
-            .get_by_cmdline(&process.cmdline)
-        {
-            return Priority::Config(profile);
-        }
+        let priority = (|| {
+            let process = process.ro(&self.owner);
 
-        if let Some(profile) = self
-            .config
-            .process_scheduler
-            .assignments
-            .get_by_name(&process.name)
-        {
-            return Priority::Config(profile);
-        }
+            if self.process_is_exception(process) {
+                return OwnedPriority::Exception;
+            }
 
-        // True when all conditions for a profile are met by a process.
-        let condition_met = |condition: &Condition| {
-            if let Some(ref cgroup) = condition.cgroup {
-                if !cgroup.matches(&process.cgroup) {
-                    return false;
+            if let Some(profile) = self
+                .config
+                .process_scheduler
+                .assignments
+                .get_by_cmdline(&process.cmdline)
+            {
+                return OwnedPriority::Config(profile.clone());
+            }
+
+            if let Some(profile) = self
+                .config
+                .process_scheduler
+                .assignments
+                .get_by_name(&process.name)
+            {
+                return OwnedPriority::Config(profile.clone());
+            }
+
+            // True when all conditions for a profile are met by a process.
+            let condition_met = |condition: &Condition| {
+                if let Some(ref cgroup) = condition.cgroup {
+                    if !cgroup.matches(&process.cgroup) {
+                        return false;
+                    }
+                }
+
+                if !condition.parent.is_empty() {
+                    let mut has_parent = false;
+
+                    if let Some(parent) = process.parent() {
+                        let parent = parent.ro(&self.owner);
+                        has_parent = condition
+                            .parent
+                            .iter()
+                            .any(|condition| condition.matches(&parent.name));
+                    }
+
+                    if !has_parent {
+                        return false;
+                    }
+                }
+
+                if let Some(ref descends_condition) = condition.descends {
+                    let is_ancestor = process.ancestors(&self.owner).any(|parent| {
+                        let parent = parent.ro(&self.owner);
+                        descends_condition.matches(&parent.name)
+                    });
+
+                    if !is_ancestor {
+                        return false;
+                    }
+                }
+
+                true
+            };
+
+            'outer: for (profile, conditions) in self
+                .config
+                .process_scheduler
+                .assignments
+                .conditions
+                .values()
+            {
+                let mut assigned_profile = None;
+
+                for (condition, include) in conditions {
+                    match (condition_met(condition), *include) {
+                        // Condition met for an include rule
+                        (true, true) => assigned_profile = Some(profile),
+                        // Condition met for an exclude rule
+                        (true, false) => continue 'outer,
+                        _ => (),
+                    }
+                }
+
+                if let Some(profile) = assigned_profile.take() {
+                    return OwnedPriority::Config(profile.clone());
                 }
             }
 
-            if !condition.parent.is_empty() {
-                let mut has_parent = false;
+            OwnedPriority::Assignable
+        })();
 
-                if let Some(parent) = process.parent() {
-                    let parent = parent.ro(&self.owner);
-                    has_parent = condition
-                        .parent
-                        .iter()
-                        .any(|condition| condition.matches(&parent.name));
-                }
-
-                if !has_parent {
-                    return false;
-                }
-            }
-
-            if let Some(ref descends_condition) = condition.descends {
-                let is_ancestor = process.ancestors(&self.owner).any(|parent| {
-                    let parent = parent.ro(&self.owner);
-                    descends_condition.matches(&parent.name)
-                });
-
-                if !is_ancestor {
-                    return false;
-                }
-            }
-
-            true
-        };
-
-        'outer: for (profile, conditions) in self
-            .config
-            .process_scheduler
-            .assignments
-            .conditions
-            .values()
-        {
-            let mut assigned_profile = None;
-
-            for (condition, include) in conditions {
-                match (condition_met(condition), *include) {
-                    // Condition met for an include rule
-                    (true, true) => assigned_profile = Some(profile),
-                    // Condition met for an exclude rule
-                    (true, false) => continue 'outer,
-                    _ => (),
-                }
-            }
-
-            if let Some(profile) = assigned_profile.take() {
-                return Priority::Config(profile);
-            }
-        }
-
-        Priority::Assignable
+        process.rw(&mut self.owner).assigned_priority = priority;
     }
 
     // Check if the `process` has descended from the `ancestor`
@@ -285,10 +301,10 @@ impl<'owner> Service<'owner> {
         false
     }
 
-    pub fn process_assign(&self, buffer: &mut Buffer, process: &Process<'owner>) {
+    pub fn apply_process_priority(&self, buffer: &mut Buffer, process: &Process<'owner>) {
         let profile_default;
 
-        let profile = match self.process_assignment(process.id) {
+        let profile = match process.assigned_priority.as_ref() {
             Priority::Assignable => {
                 if let Some(ref profile) = self.config.process_scheduler.pipewire {
                     if self.pipewire_processes.contains(&process.id) {
@@ -325,13 +341,7 @@ impl<'owner> Service<'owner> {
         &mut self,
         process: Process<'owner>,
     ) -> Arc<LCell<'owner, Process<'owner>>> {
-        let process = self.process_map.insert(&mut self.owner, process);
-
-        if self.process_is_exception(process.ro(&self.owner)) {
-            process.rw(&mut self.owner).exception = true;
-        }
-
-        process
+        self.process_map.insert(&mut self.owner, process)
     }
 
     /// Refreshes the process map
@@ -387,9 +397,16 @@ impl<'owner> Service<'owner> {
 
         tokio::time::sleep(Duration::from_secs(1)).await;
 
-        for process in self.process_map.map.values() {
-            self.process_assign(buffer, process.ro(&self.owner));
+        // Refresh priority assignments
+        let mut process_map = process::Map::default();
+        std::mem::swap(&mut process_map, &mut self.process_map);
+
+        for process in process_map.map.values() {
+            self.assign_process_priority(process);
+            self.apply_process_priority(buffer, process.ro(&self.owner));
         }
+
+        std::mem::swap(&mut process_map, &mut self.process_map);
 
         // Reassign foreground processes in case they were overriden.
         if let Some(process) = self.foreground.take() {
@@ -502,6 +519,26 @@ impl<'a> Priority<'a> {
             Priority::Assignable => Some(priority),
             Priority::Config(config) => Some(config),
             _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub enum OwnedPriority {
+    Assignable,
+    Config(Profile),
+    Exception,
+    #[default]
+    NotAssignable,
+}
+
+impl OwnedPriority {
+    fn as_ref(&self) -> Priority {
+        match self {
+            Self::Assignable => Priority::Assignable,
+            Self::Config(profile) => Priority::Config(profile),
+            Self::Exception => Priority::Exception,
+            Self::NotAssignable => Priority::NotAssignable,
         }
     }
 }

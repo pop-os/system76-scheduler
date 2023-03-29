@@ -1,4 +1,4 @@
-use crate::utils::Buffer;
+use crate::{service::OwnedPriority, utils::Buffer};
 use concat_in_place::strcat;
 use qcell::{LCell, LCellOwner};
 use std::{
@@ -20,8 +20,8 @@ pub struct Process<'owner> {
     pub cmdline: String,
     pub forked_cmdline: String,
     pub forked_name: String,
-    pub exception: bool,
     pub parent: Option<Weak<LCell<'owner, Process<'owner>>>>,
+    pub assigned_priority: OwnedPriority,
 }
 
 impl<'owner> Hash for Process<'owner> {
