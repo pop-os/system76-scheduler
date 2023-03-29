@@ -103,6 +103,7 @@ impl<'owner> Map<'owner> {
                     std::mem::swap(&mut entry.forked_name, &mut entry.name);
                     entry.name = process.name;
                     entry.cmdline = process.cmdline;
+                    entry.assigned_priority = OwnedPriority::NotAssignable;
                 }
 
                 entry.get().clone()
