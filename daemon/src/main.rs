@@ -5,7 +5,6 @@
 extern crate zbus;
 
 use qcell::LCellOwner;
-use scheduler_pipewire::processes_from_socket;
 pub use system76_scheduler_config as config;
 use system76_scheduler_pipewire as scheduler_pipewire;
 
@@ -13,18 +12,14 @@ mod cfs;
 mod dbus;
 mod priority;
 mod process;
+mod pw;
 mod service;
 mod utils;
 
 use cfs::paths::SchedPaths;
 use clap::ArgMatches;
 use dbus::{CpuMode, Server};
-use std::{
-    collections::BTreeSet,
-    os::unix::{net::UnixStream, prelude::OwnedFd},
-    path::PathBuf,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc::Sender;
 use upower_dbus::UPowerProxy;
 use zbus::{Connection, PropertyStream};
@@ -96,11 +91,16 @@ fn main() -> anyhow::Result<()> {
                                 clap::Command::new("reload").about("reload system configuration"),
                             ),
                     )
+                    .subcommand(
+                        clap::Command::new("pipewire")
+                            .about("monitor pipewire process ID activities"),
+                    )
                     .get_matches();
 
                 match matches.subcommand() {
                     Some(("cpu", matches)) => cpu(connection, matches).await,
                     Some(("daemon", matches)) => daemon(connection, matches, owner).await,
+                    Some(("pipewire", _matches)) => pw::main().await,
                     _ => Ok(()),
                 }
             };
@@ -226,7 +226,7 @@ async fn daemon(
 
         // Monitors pipewire-connected processes.
         if service.config.process_scheduler.pipewire.is_some() {
-            tokio::task::spawn_local(pipewire_service(tx.clone()));
+            tokio::task::spawn_local(pw::monitor(tx.clone()));
         }
     }
 
@@ -345,66 +345,6 @@ async fn battery_monitor(mut events: PropertyStream<'_, bool>, tx: Sender<Event>
             let _res = tx.send(Event::OnBattery(on_battery)).await;
         }
     }
-}
-
-/// Monitor pipewire sockets and the process IDs connected to them.
-async fn pipewire_service(tx: Sender<Event>) {
-    // TODO: Support stopping and restarting this on config changes.
-    enum SocketEvent {
-        Add(PathBuf),
-        Remove(PathBuf),
-    }
-
-    tracing::debug!("monitoring pipewire process IDs");
-
-    let (pw_tx, mut pw_rx) = tokio::sync::mpsc::channel(1);
-
-    let session_monitor = {
-        let pw_tx = pw_tx.clone();
-        async move {
-            loop {
-                if let Ok(run_user_dir) = std::fs::read_dir("/run/user") {
-                    for entry in run_user_dir.filter_map(Result::ok) {
-                        let socket_path = entry.path().join("pipewire-0");
-                        if socket_path.exists() {
-                            let _res = pw_tx.send(SocketEvent::Add(socket_path)).await;
-                        }
-                    }
-                }
-
-                tokio::time::sleep(std::time::Duration::from_secs(60)).await;
-            }
-        }
-    };
-
-    let session_spawner = async move {
-        let mut active_sessions = BTreeSet::<PathBuf>::new();
-
-        while let Some(event) = pw_rx.recv().await {
-            match event {
-                SocketEvent::Add(socket) => {
-                    if !active_sessions.contains(&socket) {
-                        if let Ok(stream) = UnixStream::connect(&socket) {
-                            let tx = tx.clone();
-                            let pw_tx = pw_tx.clone();
-                            std::thread::spawn(move || {
-                                processes_from_socket(&OwnedFd::from(stream), move |event| {
-                                    let _res = tx.blocking_send(Event::Pipewire(event));
-                                });
-
-                                let _res = pw_tx.blocking_send(SocketEvent::Remove(socket));
-                            });
-                        }
-                    }
-                }
-                SocketEvent::Remove(socket) => {
-                    active_sessions.remove(&socket);
-                }
-            }
-        }
-    };
-
-    futures::join!(session_monitor, session_spawner);
 }
 
 fn autogroup_set(enable: bool) {

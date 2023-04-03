@@ -463,17 +463,13 @@ impl<'owner> Service<'owner> {
     }
 
     /// Assigns a process to the pipewire profile if it does not already have an assignment.
-    pub fn set_pipewire_process(
-        &mut self,
-        buffer: &mut Buffer,
-        process: system76_scheduler_pipewire::Process,
-    ) {
+    pub fn set_pipewire_process(&mut self, buffer: &mut Buffer, process: u32) {
         if let Some(pipewire) = self.config.process_scheduler.pipewire.clone() {
-            if !self.pipewire_processes.contains(&process.id) {
-                self.pipewire_processes.push(process.id);
+            if !self.pipewire_processes.contains(&process) {
+                self.pipewire_processes.push(process);
 
-                if let Priority::Assignable = self.process_assignment(process.id) {
-                    crate::priority::set(buffer, process.id, &pipewire);
+                if let Priority::Assignable = self.process_assignment(process) {
+                    crate::priority::set(buffer, process, &pipewire);
                 }
             }
         }

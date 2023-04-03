@@ -1,3 +1,4 @@
+use bstr::BStr;
 use pipewire as pw;
 use pw::{
     node::{Node, NodeInfo},
@@ -7,6 +8,7 @@ use pw::{
 use std::{
     cell::RefCell,
     collections::{BTreeMap, HashMap},
+    io,
     os::unix::prelude::{AsRawFd, OwnedFd},
     rc::Rc,
     time::Duration,
@@ -20,8 +22,38 @@ pub enum NodeEvent<'a> {
 
 #[derive(Debug)]
 pub enum ProcessEvent {
-    Add(Process),
+    Add(u32),
     Remove(u32),
+}
+
+impl ProcessEvent {
+    #[must_use]
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        let mut fields = BStr::new(bytes).split(|b| *b == b' ');
+
+        let method = fields.next()?;
+        let pid = atoi::atoi::<u32>(fields.next()?)?;
+
+        match method {
+            b"add" => Some(ProcessEvent::Add(pid)),
+            b"rem" => Some(ProcessEvent::Remove(pid)),
+            _ => None,
+        }
+    }
+
+    /// # Errors
+    ///
+    /// - Failure to write bytes to writer
+    pub fn to_bytes<W: std::io::Write>(&self, writer: &mut W) -> io::Result<()> {
+        let (method, pid) = match self {
+            ProcessEvent::Add(pid) => (b"add", *pid),
+            ProcessEvent::Remove(pid) => (b"rem", *pid),
+        };
+
+        writer.write_all(method)?;
+        writer.write_all(b" ")?;
+        writer.write_all(itoa::Buffer::new().format(pid).as_bytes())
+    }
 }
 
 #[must_use]
@@ -51,14 +83,15 @@ pub fn processes_from_socket(socket: &OwnedFd, mut func: impl FnMut(ProcessEvent
     let _res = nodes_from_socket(socket, move |event| match event {
         NodeEvent::Info(pw_id, info) => {
             if let Some(process) = Process::from_node(info) {
-                managed.insert(pw_id, process.id);
-                func(ProcessEvent::Add(process));
+                if managed.insert(pw_id, process.id).is_none() {
+                    func(ProcessEvent::Add(process.id));
+                }
             }
         }
 
         NodeEvent::Remove(pw_id) => {
-            if let Some(id) = managed.remove(&pw_id) {
-                func(ProcessEvent::Remove(id));
+            if let Some(pid) = managed.remove(&pw_id) {
+                func(ProcessEvent::Remove(pid));
             }
         }
     });
