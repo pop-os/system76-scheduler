@@ -39,6 +39,7 @@ impl MatchCondition {
 
 #[derive(Default, Debug)]
 pub struct Assignments {
+    #[allow(clippy::type_complexity)]
     pub conditions: HashMap<Box<str>, (Profile, Vec<(Condition, bool)>)>,
     pub(crate) exceptions_by_name: BTreeSet<Box<str>>,
     pub(crate) exceptions_by_cmdline: BTreeSet<Box<str>>,

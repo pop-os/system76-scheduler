@@ -7,7 +7,6 @@ use crate::process::{self, Process};
 use crate::utils::Buffer;
 use qcell::{LCell, LCellOwner};
 use std::collections::BTreeMap;
-use std::time::Duration;
 use std::{os::unix::prelude::OsStrExt, sync::Arc};
 use system76_scheduler_config::scheduler::Condition;
 
@@ -65,7 +64,7 @@ impl<'owner> Service<'owner> {
     }
 
     /// Assign a priority to a newly-created process, and record that process in the map.
-    pub async fn assign_new_process(
+    pub fn assign_new_process(
         &mut self,
         buffer: &mut Buffer,
         pid: u32,
@@ -75,31 +74,16 @@ impl<'owner> Service<'owner> {
     ) {
         let parent = self.process_map.get_pid(&self.owner, parent_pid).cloned();
 
-        if parent.is_none() {
-            self.process_map_refresh(buffer);
-            return;
-        }
-
-        if !process::exists(buffer, pid) {
-            return;
-        }
-
-        if cmdline.is_empty() {
-            cmdline = process::cmdline(buffer, pid).unwrap_or_default();
-        }
-
         let mut cgroup = String::new();
-        let mut attempts = 0;
 
-        while cgroup.is_empty() || attempts < 2 {
+        if process::exists(buffer, pid) {
+            if cmdline.is_empty() {
+                cmdline = process::cmdline(buffer, pid).unwrap_or_default();
+            }
+
             cgroup = process::cgroup(buffer, pid)
                 .map(String::from)
                 .unwrap_or_default();
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            if !process::exists(buffer, pid) {
-                return;
-            }
-            attempts += 1;
         }
 
         // Add the process to the map, if it does not already exist.
@@ -108,9 +92,7 @@ impl<'owner> Service<'owner> {
             Process {
                 id: pid,
                 parent_id: parent_pid,
-                cgroup: process::cgroup(buffer, pid)
-                    .map(String::from)
-                    .unwrap_or_default(),
+                cgroup,
                 cmdline,
                 name,
                 parent: parent.as_ref().map(Arc::downgrade),

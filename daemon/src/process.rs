@@ -99,11 +99,17 @@ impl<'owner> Map<'owner> {
             Entry::Occupied(entry) => {
                 {
                     let entry = entry.get().rw(owner);
-                    std::mem::swap(&mut entry.forked_cmdline, &mut entry.cmdline);
-                    std::mem::swap(&mut entry.forked_name, &mut entry.name);
-                    entry.name = process.name;
-                    entry.cmdline = process.cmdline;
-                    entry.assigned_priority = OwnedPriority::NotAssignable;
+
+                    entry.cgroup = process.cgroup;
+                    entry.parent = process.parent;
+
+                    if entry.name != process.name {
+                        std::mem::swap(&mut entry.forked_cmdline, &mut entry.cmdline);
+                        std::mem::swap(&mut entry.forked_name, &mut entry.name);
+                        entry.name = process.name;
+                        entry.cmdline = process.cmdline;
+                        entry.assigned_priority = OwnedPriority::NotAssignable;
+                    }
                 }
 
                 entry.get().clone()
@@ -159,6 +165,7 @@ pub fn cmdline(buffer: &mut Buffer, pid: u32) -> Option<String> {
     )
 }
 
+#[allow(dead_code)]
 pub fn exists(buffer: &mut Buffer, pid: u32) -> bool {
     buffer.path.clear();
     Path::new(strcat!(&mut buffer.path, "/proc/" buffer.itoa.format(pid) "/status")).exists()

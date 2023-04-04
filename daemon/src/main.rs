@@ -192,7 +192,7 @@ async fn daemon(
         if service.config.process_scheduler.execsnoop {
             tracing::debug!("monitoring process IDs in realtime with execsnoop");
             let tx = tx.clone();
-            let (scheduled_tx, mut scheduled_rx) = tokio::sync::mpsc::channel(1);
+            let (scheduled_tx, mut scheduled_rx) = tokio::sync::mpsc::unbounded_channel();
             std::thread::spawn(move || {
                 if let Ok(mut watcher) = execsnoop::watch() {
                     // Listen for spawned process, scheduling them to be handled with a delay of 1 second after creation.
@@ -202,8 +202,8 @@ async fn daemon(
                             std::str::from_utf8(process.name),
                             std::str::from_utf8(process.cmd),
                         ) {
-                            let _res = scheduled_tx.blocking_send((
-                                Instant::now() + Duration::from_secs(1),
+                            let _res = scheduled_tx.send((
+                                Instant::now() + Duration::from_secs(2),
                                 ExecCreate {
                                     pid: process.pid,
                                     parent_pid: process.parent_pid,
@@ -252,9 +252,7 @@ async fn daemon(
                 name,
                 cmdline,
             }) => {
-                service
-                    .assign_new_process(&mut buffer, pid, parent_pid, name, cmdline)
-                    .await;
+                service.assign_new_process(&mut buffer, pid, parent_pid, name, cmdline);
             }
 
             Event::RefreshProcessMap => {
