@@ -102,8 +102,8 @@ fn read_main(buffer: &mut String) -> Config {
 
 fn read_assignments(mut config: Config, buffer: &mut String) -> Config {
     const PATHS: [&str; 2] = [
-        concatcp!(DISTRIBUTION_PATH, "assignments/"),
-        concatcp!(SYSTEM_CONF_PATH, "assignments/"),
+        concatcp!(DISTRIBUTION_PATH, "process-scheduler/"),
+        concatcp!(SYSTEM_CONF_PATH, "process-scheduler/"),
     ];
 
     for path in configuration_files(&PATHS, ".kdl") {
