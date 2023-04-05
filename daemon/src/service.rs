@@ -174,6 +174,10 @@ impl<'owner> Service<'owner> {
                 return OwnedPriority::Config(profile.clone());
             }
 
+            if process.cgroup.is_empty() {
+                return OwnedPriority::NotAssignable;
+            }
+
             // True when all conditions for a profile are met by a process.
             let condition_met = |condition: &Condition| {
                 if let Some(ref cgroup) = condition.cgroup {
