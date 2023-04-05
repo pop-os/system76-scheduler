@@ -27,12 +27,10 @@ pub fn set(buffer: &mut Buffer, process: u32, profile: &Profile) {
             return;
         };
 
-        unsafe {
-            libc::setpriority(
-                libc::PRIO_PROCESS,
-                process,
-                libc::c_int::from(profile.nice.get()),
-            );
+        if let Some(nice) = profile.nice {
+            unsafe {
+                libc::setpriority(libc::PRIO_PROCESS, process, libc::c_int::from(nice.get()));
+            }
         }
 
         set_policy(process, profile.sched_policy, profile.sched_priority);

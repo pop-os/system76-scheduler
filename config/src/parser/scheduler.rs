@@ -246,7 +246,7 @@ impl Profile {
             return
         };
 
-        self.nice = Niceness::from(niceness);
+        self.nice = Some(Niceness::from(niceness));
     }
 
     #[tracing::instrument(skip_all)]

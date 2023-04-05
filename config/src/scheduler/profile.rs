@@ -7,7 +7,7 @@ use crate::scheduler::{Niceness, SchedPolicy, SchedPriority};
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Profile {
     /// Niceness priority level
-    pub nice: Niceness,
+    pub nice: Option<Niceness>,
     /// I/O priority class
     pub io: ioprio::Class,
     /// Scheduler policy for a process
@@ -19,7 +19,7 @@ pub struct Profile {
 impl Default for Profile {
     fn default() -> Self {
         Self {
-            nice: Niceness::default(),
+            nice: None,
             io: ioprio::Class::BestEffort(ioprio::BePriorityLevel::lowest()),
             sched_policy: SchedPolicy::Other,
             sched_priority: SchedPriority(1),
