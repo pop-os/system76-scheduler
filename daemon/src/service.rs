@@ -63,6 +63,36 @@ impl<'owner> Service<'owner> {
             .unwrap_or(&crate::config::cfs::PROFILE_RESPONSIVE)
     }
 
+    /// Assigns children of a process in case they've not been assigned.
+    pub fn assign_children(&mut self, buffer: &mut Buffer, pid: u32) {
+        let mut tasks = Vec::new();
+        let mut scan = vec![pid];
+
+        while let Some(process) = scan.pop() {
+            for pid in process::children(buffer, process) {
+                scan.push(pid);
+            }
+
+            tasks.push(process);
+        }
+
+        for pid in tasks {
+            if self.process_map.get_pid(&self.owner, pid).is_none() {
+                let Some(parent_pid) = process::parent_id(buffer, pid) else {
+                    continue
+                };
+
+                let Some(cmdline) = process::cmdline(buffer, pid) else {
+                    continue
+                };
+
+                let name = process::name(&cmdline).to_owned();
+
+                self.assign_new_process(buffer, pid, parent_pid, name, cmdline);
+            }
+        }
+    }
+
     /// Assign a priority to a newly-created process, and record that process in the map.
     pub fn assign_new_process(
         &mut self,
@@ -214,9 +244,13 @@ impl<'owner> Service<'owner> {
 
     // Check if the `process` has descended from the `ancestor`
     pub fn process_descended_from(&self, process: &Process<'owner>, ancestor: u32) -> bool {
+        if process.parent_id == ancestor {
+            return true;
+        }
+
         process.ancestors(&self.owner).any(|process| {
             let process = process.ro(&self.owner);
-            process.id == ancestor
+            process.id == ancestor || process.parent_id == ancestor
         })
     }
 
@@ -401,9 +435,12 @@ impl<'owner> Service<'owner> {
 
     /// Sets a process as the foreground.
     pub fn set_foreground_process(&mut self, buffer: &mut Buffer, pid: u32) {
+        self.assign_children(buffer, pid);
+
         if let Some(ref assignments) = self.config.process_scheduler.foreground {
             self.foreground = Some(pid);
             self.foreground_processes.clear();
+            self.foreground_processes.push(pid);
 
             if !self.pipewire_processes.contains(&pid) {
                 if let Some(priority) = self
@@ -413,8 +450,6 @@ impl<'owner> Service<'owner> {
                     crate::priority::set(buffer, pid, priority);
                 }
             }
-
-            self.foreground_processes.push(pid);
 
             for process in self.process_map.map.values() {
                 let process = process.ro(&self.owner);

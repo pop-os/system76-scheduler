@@ -253,6 +253,7 @@ async fn daemon(
                 cmdline,
             }) => {
                 service.assign_new_process(&mut buffer, pid, parent_pid, name, cmdline);
+                service.assign_children(&mut buffer, pid);
             }
 
             Event::RefreshProcessMap => {

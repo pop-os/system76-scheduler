@@ -1,4 +1,5 @@
 use crate::{service::OwnedPriority, utils::Buffer};
+use bstr::ByteSlice;
 use concat_in_place::strcat;
 use qcell::{LCell, LCellOwner};
 use std::{
@@ -185,4 +186,21 @@ pub fn parent_id(buffer: &mut Buffer, pid: u32) -> Option<u32> {
     }
 
     None
+}
+
+pub fn children(buffer: &'_ mut Buffer, pid: u32) -> impl Iterator<Item = u32> + '_ {
+    buffer.path.clear();
+    buffer.file_raw.clear();
+
+    let pid = buffer.itoa.format(pid);
+    let path = Path::new(strcat!(&mut buffer.path, "/proc/" pid "/task/" pid "/children"));
+
+    crate::utils::read_into_vec(&mut buffer.file_raw, path)
+        .ok()
+        .into_iter()
+        .flat_map(|bytes| {
+            bstr::BStr::new(bytes)
+                .fields()
+                .filter_map(atoi::atoi::<u32>)
+        })
 }
