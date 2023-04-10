@@ -9,6 +9,7 @@ use wildmatch::WildMatch;
 pub struct Condition {
     pub descends: Option<MatchCondition>,
     pub cgroup: Option<MatchCondition>,
+    pub name: Option<MatchCondition>,
     pub parent: Vec<MatchCondition>,
 }
 

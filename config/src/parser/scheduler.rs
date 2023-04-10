@@ -105,6 +105,10 @@ impl Assignments {
                                         condition.descends =
                                             entry.value().as_string().map(MatchCondition::new);
                                     }
+                                    "name" => {
+                                        condition.name =
+                                            entry.value().as_string().map(MatchCondition::new);
+                                    }
                                     "parent" => {
                                         if let Some(parent) = entry.value().as_string() {
                                             condition.parent.push(MatchCondition::new(parent));
@@ -116,7 +120,12 @@ impl Assignments {
                                 }
                             }
 
-                            if condition.cgroup.is_some() || !condition.parent.is_empty() {
+                            let has_condition = condition.cgroup.is_some()
+                                || condition.descends.is_some()
+                                || condition.name.is_some()
+                                || !condition.parent.is_empty();
+
+                            if has_condition {
                                 self.assign_by_condition(
                                     profile_name,
                                     condition,

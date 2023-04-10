@@ -9,6 +9,8 @@ assignments {
 		teams
 		wireplumber
 		zoom
+		bitwig-studio
+		include name="Bitwig*"
 	}
 
 	games {
