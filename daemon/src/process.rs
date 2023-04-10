@@ -23,6 +23,7 @@ pub struct Process<'owner> {
     pub forked_name: String,
     pub parent: Option<Weak<LCell<'owner, Process<'owner>>>>,
     pub assigned_priority: OwnedPriority,
+    pub pipewire_ancestor: Option<u32>,
 }
 
 impl<'owner> Hash for Process<'owner> {

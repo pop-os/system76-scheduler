@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use super::Profile;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap},
+    sync::Arc,
+};
 use wildmatch::WildMatch;
 
 #[derive(Default, Debug)]
@@ -45,7 +48,7 @@ pub struct Assignments {
     pub(crate) exceptions_by_name: BTreeSet<Box<str>>,
     pub(crate) exceptions_by_cmdline: BTreeSet<Box<str>>,
     pub exceptions_conditions: Vec<Condition>,
-    pub(crate) profiles: BTreeMap<Box<str>, Profile>,
+    pub(crate) profiles: BTreeMap<Arc<str>, Profile>,
     pub(crate) profile_by_name: BTreeMap<Box<str>, Profile>,
     pub(crate) profile_by_cmdline: BTreeMap<Box<str>, Profile>,
 }
@@ -86,8 +89,8 @@ impl Assignments {
         self.profiles.get(profile)
     }
 
-    pub fn profile_insert(&mut self, name: &str, profile: Profile) {
-        self.profiles.insert(name.into(), profile);
+    pub fn profile_insert(&mut self, name: Arc<str>, profile: Profile) {
+        self.profiles.insert(name, profile);
     }
 
     pub fn assign_by_name(&mut self, name: &str, profile: Profile) {

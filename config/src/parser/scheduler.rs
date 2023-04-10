@@ -1,6 +1,8 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: MPL-2.0
 
+use std::sync::Arc;
+
 use crate::kdl::NodeExt;
 use crate::scheduler::{Assignments, Condition, Config, MatchCondition, Profile};
 use crate::{
@@ -59,20 +61,21 @@ impl Assignments {
         };
 
         for profile_node in document.nodes() {
-            let profile_name = profile_node.name().value();
+            let profile_name = Arc::from(profile_node.name().value());
 
-            let span = tracing::warn_span!("Assignments::parse", profile = profile_name);
+            let span = tracing::warn_span!("Assignments::parse", profile = &*profile_name);
             let _entered = span.enter();
 
             // Stores the properties defined for this profile profile.
-            let (exists, profile) = self
-                .profile(profile_name)
-                .map_or_else(|| (false, Profile::default()), |p| (true, p.clone()));
+            let (exists, profile) = self.profile(&profile_name).map_or_else(
+                || (false, Profile::new(profile_name.clone())),
+                |p| (true, p.clone()),
+            );
 
             let profile = profile.parse(profile_node);
 
             if !exists {
-                self.profile_insert(profile_name, profile.clone());
+                self.profile_insert(profile_name.clone(), profile.clone());
             }
 
             if let Some(rules) = profile_node.children() {
@@ -127,7 +130,7 @@ impl Assignments {
 
                             if has_condition {
                                 self.assign_by_condition(
-                                    profile_name,
+                                    &profile_name,
                                     condition,
                                     profile,
                                     ParseCondition::Include == parse_condition,
