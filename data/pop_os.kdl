@@ -39,8 +39,9 @@ assignments {
 	}
 
 	package-manager {
+		include name="apt-*"
+		include name="dpkg-*"
 		apt
-		apt-get
 		dpkg
 		flatpak
 		fwupd
@@ -49,6 +50,11 @@ assignments {
 	}
 
 	batch {
+		include name="sbuild-*"
+		7z
+		7za
+		7zr
+		ar
 		boinc
 		c++
 		cargo
@@ -70,7 +76,11 @@ assignments {
 		ninja
 		rust-analyzer
 		rustc
+		sbuild
+		tar
 		tracker-miner-fs-3
+		unrar
+		zip
 	}
 }
 
