@@ -51,9 +51,9 @@ assignments {
 
 	batch {
 		include name="sbuild-*"
-		7z
-		7za
-		7zr
+		"7z"
+		"7za"
+		"7zr"
 		ar
 		boinc
 		c++
