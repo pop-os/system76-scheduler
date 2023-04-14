@@ -10,9 +10,9 @@ publish = false
 [dependencies]
 anyhow = "1.0.70"
 futures = "0.3.28"
-libc = "0.2.140"
+libc = "0.2.141"
 num_cpus = "1.15.0"
-serde = { version = "1.0.159", features = ["derive"] }
+serde = { version = "1.0.160", features = ["derive"] }
 serde_repr = "0.1.12"
 thiserror = "1.0.40"
 upower_dbus = "0.3.2"
@@ -25,7 +25,7 @@ fomat-macros = "0.3.2"
 ioprio = "0.2.0"
 compact_str = { version = "0.7.0", features = ["serde"] }
 execsnoop = { path = "../execsnoop" }
-clap = { version = "4.2.1", features = ["cargo"] }
+clap = { version = "4.2.2", features = ["cargo"] }
 system76-scheduler-config = { path = "../config" }
 aho-corasick = "0.7.20"
 memchr = "2.5.0"
@@ -34,7 +34,7 @@ atoi = "2.0.0"
 system76-scheduler-pipewire = { path = "../pipewire"}
 pipewire = "0.6.0"
 qcell = "0.5.3"
-futures-lite = "1.12.0"
+futures-lite = "1.13.0"
 
 [dependencies.tracing-subscriber]
 version = "0.3.16"
