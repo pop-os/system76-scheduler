@@ -4,6 +4,24 @@ Scheduling service which optimizes Linux's CPU scheduler and automatically assig
 
 These changes result in a noticeable improvement in the experienced smoothness and performance of applications and games. The improved responsiveness of applications is most noticeable on older systems with budget hardware, whereas games will benefit from higher framerates and reduced jitter. This is because background applications and services will be given a smaller portion of leftover CPU budget after the active process has had the most time on the CPU.
 
+## Install
+
+Requires dependencies as defined in the [debian/control](./debian/control) file:
+
+- cargo & rustc
+- clang
+- just
+- libclang-dev
+- libpipewire-0.3-dev
+- pkg-config
+
+Then the included justfile can be used to build and install:
+
+```sh
+just execsnoop=$(which execsnoop-bpfcc) build-release
+sudo just sysconfdir=/usr/share install
+```
+
 ## DBus
 
 - Interface: `com.system76.Scheduler`
@@ -24,12 +42,12 @@ Note that if the `background` and `foreground` assignment profiles are defined, 
 
 ## Process Priority Assignments
 
-KDL configuration files are stored at the following locations:
+In addition to `config.kdl`, additional process scheduling profiles are stored in:
 
-- User-config: `/etc/system76-scheduler/assignments/`
-- Distribution: `/usr/share/system76-scheduler/assignments/`
+- User-config: `/etc/system76-scheduler/process-scheduler/`
+- Distribution: `/usr/share/system76-scheduler/process-scheduler/`
 
-An [example configuration is provided here](./data/assignments.kdl). It is parsed the same as the assignments and exceptions nodes in the main config, and profiles can inherit values from the previous assignment of the same name.
+An [example configuration is provided here](./data/pop-os.kdl). It is parsed the same as the assignments and exceptions nodes in the main config, and profiles can inherit values from the previous assignment of the same name.
 
 ### Profile
 
