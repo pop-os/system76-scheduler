@@ -145,10 +145,15 @@ impl<'owner> Service<'owner> {
     pub fn assign_children(&mut self, buffer: &mut Buffer, pid: u32) {
         let mut tasks = Vec::new();
         let mut scan = vec![pid];
+        let mut scanned = Vec::new();
 
         while let Some(process) = scan.pop() {
+            scanned.push(process);
+
             for pid in process::children(buffer, process) {
-                scan.push(pid);
+                if !(scan.contains(&pid) || scanned.contains(&pid)) {
+                    scan.push(pid);
+                }
             }
 
             tasks.push(process);
