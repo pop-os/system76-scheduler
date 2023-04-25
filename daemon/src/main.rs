@@ -249,6 +249,13 @@ async fn daemon(
 
     connection.request_name("com.system76.Scheduler").await?;
 
+    // Start service after system uptime is above 10 seconds
+    if let Some(uptime) = uptime() {
+        if uptime < 10 {
+            std::thread::sleep(std::time::Duration::from_secs(10 - uptime));
+        }
+    }
+
     while let Some(event) = rx.recv().await {
         match event {
             Event::ExecCreate(ExecCreate {
@@ -354,4 +361,10 @@ async fn battery_monitor(mut events: PropertyStream<'_, bool>, tx: Sender<Event>
 fn autogroup_set(enable: bool) {
     const PATH: &str = "/proc/sys/kernel/sched_autogroup_enabled";
     let _res = std::fs::write(PATH, if enable { b"1" } else { b"0" });
+}
+
+fn uptime() -> Option<u64> {
+    let uptime = std::fs::read_to_string("/proc/uptime").ok()?;
+    let seconds = uptime.split('.').next()?;
+    seconds.parse::<u64>().ok()
 }
