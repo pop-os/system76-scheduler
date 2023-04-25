@@ -2,6 +2,7 @@ use crate::{cfs::Config, kdl::NodeExt};
 use kdl::KdlNode;
 
 impl Config {
+    /// Parses the CFS document node
     pub fn read(&mut self, node: &KdlNode) {
         self.enable = node.enabled().unwrap_or(true);
 

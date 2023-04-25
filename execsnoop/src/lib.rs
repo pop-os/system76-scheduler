@@ -1,20 +1,30 @@
 // Copyright 2022 System76 <info@system76.com>
 // SPDX-License-Identifier: MPL-2.0
 
+#![deny(missing_docs)]
+
+//! Spawns the execsnoop-bpfcc application to watch process executions.
+
 use atoi::atoi;
 use bstr::{BStr, ByteSlice};
 use bytelines::ByteLines;
 use std::io::{self, BufReader};
 use std::process::{Command, Stdio};
 
+/// Process info
 #[derive(Clone, Debug)]
 pub struct Process<'a> {
+    /// Process name
     pub name: &'a [u8],
+    /// Process cmdline
     pub cmd: &'a [u8],
+    /// Process PID
     pub pid: u32,
+    /// Process parent PID
     pub parent_pid: u32,
 }
 
+/// Process iterator
 pub struct ProcessIterator {
     child: std::process::Child,
     stream: ByteLines<BufReader<std::process::ChildStdout>>,
@@ -23,6 +33,7 @@ pub struct ProcessIterator {
 }
 
 impl ProcessIterator {
+    /// Get the next process from the iterator
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<Process> {
         while let Some(Ok(line)) = self.stream.next() {

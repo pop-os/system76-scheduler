@@ -5,8 +5,12 @@ use compact_str::CompactString;
 use kdl::KdlNode;
 use std::collections::BTreeMap;
 
+/// CFS configurations
 pub struct Config {
+    /// Enables CFS configuration
     pub enable: bool,
+
+    /// CFS profiles
     pub profiles: BTreeMap<CompactString, Profile>,
 }
 
@@ -27,6 +31,7 @@ impl Default for Config {
     }
 }
 
+/// Default CFS profile
 pub const PROFILE_DEFAULT: Profile = Profile {
     latency: 6,
     nr_latency: 8,
@@ -35,6 +40,7 @@ pub const PROFILE_DEFAULT: Profile = Profile {
     preempt: "voluntary",
 };
 
+/// Responsive CFS profile
 pub const PROFILE_RESPONSIVE: Profile = Profile {
     latency: 4,
     nr_latency: 10,
@@ -43,6 +49,7 @@ pub const PROFILE_RESPONSIVE: Profile = Profile {
     preempt: "full",
 };
 
+/// CFS Profile
 pub struct Profile {
     /// Preemption latency for CPU-bound tasks in ns
     pub latency: u64,
@@ -56,6 +63,7 @@ pub struct Profile {
     pub preempt: &'static str,
 }
 
+/// Parses CFS profiles from a KDL node
 pub fn parse(nodes: &[KdlNode]) -> impl Iterator<Item = (&str, Profile)> {
     nodes.iter().map(|node| {
         let mut config = PROFILE_DEFAULT;

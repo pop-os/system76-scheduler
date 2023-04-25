@@ -7,7 +7,9 @@ use crate::scheduler::{Niceness, SchedPolicy, SchedPriority};
 
 #[must_use]
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+/// Process scheduler profile
 pub struct Profile {
+    /// Profile name
     pub name: Arc<str>,
     /// Niceness priority level
     pub nice: Option<Niceness>,
@@ -20,6 +22,7 @@ pub struct Profile {
 }
 
 impl Profile {
+    /// Creates a process scheduler profile
     pub const fn new(name: Arc<str>) -> Self {
         Self {
             name,

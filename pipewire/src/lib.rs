@@ -1,3 +1,10 @@
+// Copyright 2023 System76 <info@system76.com>
+// SPDX-License-Identifier: MPL-2.0
+
+#![deny(missing_docs)]
+
+//! Pipewire integration for the System76 Scheduler
+
 use bstr::BStr;
 use pipewire as pw;
 use pw::{
@@ -14,19 +21,26 @@ use std::{
     time::Duration,
 };
 
+/// Node event
 #[derive(Debug)]
 pub enum NodeEvent<'a> {
+    /// Node info
     Info(u32, &'a NodeInfo),
+    /// Node removal
     Remove(u32),
 }
 
+/// Process event
 #[derive(Debug)]
 pub enum ProcessEvent {
+    /// Process add
     Add(u32),
+    /// Process remove
     Remove(u32),
 }
 
 impl ProcessEvent {
+    /// Parse a process event from bytes
     #[must_use]
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         let mut fields = BStr::new(bytes).split(|b| *b == b' ');
@@ -56,13 +70,16 @@ impl ProcessEvent {
     }
 }
 
+/// Process information
 #[must_use]
 #[derive(Copy, Clone, Debug)]
 pub struct Process {
+    /// Process ID
     pub id: u32,
 }
 
 impl Process {
+    /// Attains process info from a pipewire info node.
     #[must_use]
     pub fn from_node(info: &NodeInfo) -> Option<Self> {
         let props = info.props()?;

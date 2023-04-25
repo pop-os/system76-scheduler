@@ -1,7 +1,7 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: MPL-2.0
 
-pub mod assignments;
+mod assignments;
 pub use assignments::{Assignments, Condition, MatchCondition};
 
 mod profile;
@@ -9,12 +9,19 @@ pub use profile::Profile;
 
 use std::{borrow::Cow, str::FromStr};
 
+/// Process scheduling configuration
 pub struct Config {
+    /// Enables process scheduling
     pub enable: bool,
+    /// Enables execsnoop
     pub execsnoop: bool,
+    /// Defines the refresh rate for polling processes
     pub refresh_rate: u16,
+    /// Process profile assignments
     pub assignments: Assignments,
+    /// Foreground profiles
     pub foreground: Option<ForegroundAssignments>,
+    /// Pipewire profile
     pub pipewire: Option<Profile>,
 }
 
@@ -31,16 +38,23 @@ impl Default for Config {
     }
 }
 
+/// Foreground process profiles
 pub struct ForegroundAssignments {
+    /// Background profile
     pub background: Profile,
+    /// Foreground profile
     pub foreground: Profile,
 }
 
+/// I/O Class
 #[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum IoClass {
+    /// Idle
     Idle,
+    /// BestEffort
     #[default]
     BestEffort,
+    /// Realtime
     Realtime,
 }
 
@@ -59,19 +73,27 @@ impl FromStr for IoClass {
     }
 }
 
+/// I/O policy
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum IoPolicy {
+    /// Idle
     Idle,
+    /// Standard
     Standard,
+    /// BestEffort
     BestEffort(IoPriority),
+    /// Realtime
     Realtime(IoPriority),
 }
 
+/// I/O priority
+///
 /// Restricts the value between 0 through 7.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct IoPriority(u8);
 
 impl IoPriority {
+    /// Value as a number
     #[must_use]
     pub fn get(self) -> u8 {
         self.0
@@ -95,6 +117,7 @@ impl From<u8> for IoPriority {
 pub struct Niceness(i8);
 
 impl Niceness {
+    /// Value as a number
     #[must_use]
     pub fn get(self) -> i8 {
         self.0
@@ -107,24 +130,36 @@ impl From<i8> for Niceness {
     }
 }
 
+/// Process assignment
 pub enum Process<'a> {
+    /// Assign by cmdline
     CmdLine(Cow<'a, str>),
+    /// Assign by name
     Name(Cow<'a, str>),
 }
 
+/// Scheduler configuration
 pub struct Scheduler {
+    /// Scheduler policy
     pub policy: SchedPolicy,
+    /// Scheduler priority
     pub priority: SchedPriority,
 }
 
+/// Scheduler policy
 #[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum SchedPolicy {
+    /// SCHED_BATCH
     Batch = libc::SCHED_BATCH,
+    /// SCHED_FIFO
     Fifo = libc::SCHED_FIFO,
+    /// SCHED_IDLE
     Idle = libc::SCHED_IDLE,
+    /// SCHED_OTHER
     #[default]
     Other = libc::SCHED_OTHER,
+    /// SCHED_RR
     Rr = libc::SCHED_RR,
 }
 
@@ -156,6 +191,7 @@ impl Default for SchedPriority {
 }
 
 impl SchedPriority {
+    /// Value as a number
     #[must_use]
     pub fn get(self) -> u8 {
         self.0

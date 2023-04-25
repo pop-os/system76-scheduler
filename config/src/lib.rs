@@ -1,9 +1,18 @@
-// Copyright 2021 System76 <info@system76.com>
+// Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: MPL-2.0
 
+#![deny(missing_docs)]
+
+//! System76 Scheduler's configuration parsing and logic.
+
+/// CFS configurations
 pub mod cfs;
-pub mod kdl;
+
+pub(crate) mod kdl;
+
 mod parser;
+
+/// Process scheduler configurations
 pub mod scheduler;
 
 use std::{
@@ -14,18 +23,26 @@ use std::{
 const DISTRIBUTION_PATH: &str = "/usr/share/system76-scheduler/";
 const SYSTEM_CONF_PATH: &str = "/etc/system76-scheduler/";
 
+/// System76 Scheduler configuration
 #[must_use]
 #[derive(Default)]
 pub struct Config {
+    /// Controls autogrouping status
     pub autogroup_enabled: bool,
+
+    /// CFS profiles
     pub cfs_profiles: cfs::Config,
+
+    /// Process scheduler config
     pub process_scheduler: scheduler::Config,
 }
 
+/// Parses the scheduler's configuration files
 pub fn config() -> Config {
     parser::read_config()
 }
 
+/// Locates configuration files of a given extension from the given paths.
 pub fn configuration_files<'a>(
     paths: &'a [&str],
     extension: &'a str,

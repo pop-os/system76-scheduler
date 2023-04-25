@@ -12,6 +12,7 @@ use crate::{
 use kdl::{KdlEntry, KdlIdentifier, KdlNode};
 
 impl Config {
+    /// Parses the process-scheduler node
     pub fn read(&mut self, node: &KdlNode) {
         self.enable = node.enabled().unwrap_or(true);
 
@@ -48,6 +49,7 @@ impl Config {
 }
 
 impl Assignments {
+    /// Parses the assignments node
     pub fn parse(&mut self, node: &KdlNode) {
         #[derive(PartialEq, Eq)]
         enum ParseCondition {
@@ -152,6 +154,7 @@ impl Assignments {
         }
     }
 
+    /// Parses the exceptions node
     pub fn parse_exceptions(&mut self, node: &KdlNode) {
         let Some(document) = node.children() else {
             return;
@@ -195,6 +198,7 @@ impl Assignments {
 }
 
 impl Profile {
+    /// Parses a profile node
     pub fn parse(mut self, node: &KdlNode) -> Self {
         for (property, _) in self.parse_properties(crate::kdl::iter_properties(node)) {
             tracing::error!("unknown property: {}", property);
@@ -203,6 +207,7 @@ impl Profile {
         self
     }
 
+    /// Parses the properties of the profile
     pub fn parse_properties<'a>(
         &'a mut self,
         entries: impl Iterator<Item = (&'a str, &'a KdlEntry)> + 'a,
@@ -219,6 +224,7 @@ impl Profile {
         })
     }
 
+    /// Parses the `io` property
     #[tracing::instrument(skip_all)]
     pub fn parse_io(&mut self, entry: &KdlEntry) {
         let class = entry
@@ -251,6 +257,7 @@ impl Profile {
         };
     }
 
+    /// Parses the `nice` property
     #[tracing::instrument(skip_all)]
     pub fn parse_nice(&mut self, entry: &KdlEntry) {
         let Some(niceness) = entry.as_i8() else {
@@ -261,6 +268,7 @@ impl Profile {
         self.nice = Some(Niceness::from(niceness));
     }
 
+    /// Parses the `sched` property
     #[tracing::instrument(skip_all)]
     pub fn parse_sched(&mut self, entry: &KdlEntry) {
         if let Some(policy) = entry.ty().map(KdlIdentifier::value) {
