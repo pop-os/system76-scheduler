@@ -1,3 +1,9 @@
+system76-scheduler (2.0.0) jammy; urgency=medium
+
+  * https://github.com/pop-os/system76-scheduler/releases/tag/2.0.0
+
+ -- Michael Murphy <mmstick@pop-os.localdomain>  Tue, 07 Mar 2023 17:02:12 +0100
+
 system76-scheduler (1.2.2) jammy; urgency=medium
 
   * https://github.com/pop-os/system76-scheduler/releases/tag/1.2.2

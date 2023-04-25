@@ -4,8 +4,12 @@ Priority: optional
 Maintainer: Michael Murphy <mmstick@pm.me>
 Build-Depends:
     cargo,
+    clang,
     debhelper-compat (=10),
     just,
+    libclang-dev,
+    libpipewire-0.3-dev,
+    pkg-config,
     rustc (>=1.53),
 Standards-Version: 4.1.1
 Homepage: https://github.com/pop-os/system76-scheduler

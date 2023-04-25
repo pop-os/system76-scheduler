@@ -1,7 +1,3 @@
 {
-    "rust-analyzer.checkOnSave.command": "clippy",
-    "rust-analyzer.checkOnSave.extraArgs": ["--", "-W", "clippy::pedantic"],
-    "rust-analyzer.server.extraEnv": {
-        "EXECSNOOP_PATH": "/usr/sbin/execsnoop-bpfcc"
-    }
+    "rust-analyzer.check.overrideCommand": ["just", "check-json"],
 }

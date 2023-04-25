@@ -1,0 +1,89 @@
+assignments {
+	recording {
+		amsynth
+		easyeffects
+		jamesdsp
+		jitsi
+		mumble
+		obs
+		teams
+		wireplumber
+		zoom
+		bitwig-studio
+		include name="Bitwig*"
+	}
+
+	games {
+		lutris
+		steam
+		vrcompositor
+		vrdashboard
+		vrmonitor
+		vrserver
+		include descends="steam"
+		include descends="lutris"
+	}
+
+	desktop-environment {
+		cosmic-comp
+		gnome-shell
+		i3wm
+		kwin
+		sway
+		Xorg
+	}
+
+	session-services {
+		include parent="gnome-session-binary"
+		include parent="gvfsd"
+	}
+
+	package-manager {
+		include name="apt-*"
+		include name="dpkg-*"
+		apt
+		dpkg
+		flatpak
+		fwupd
+		packagekitd
+		update-initramfs
+	}
+
+	batch {
+		include name="sbuild-*"
+		"7z"
+		"7za"
+		"7zr"
+		ar
+		boinc
+		c++
+		cargo
+		clang
+		cmake
+		cpp
+		FAHClient
+		FAHCoreWrapper
+		fossilize-replay
+		g++
+		gcc
+		gradle
+		javac
+		ld
+		lld
+		make
+		mold
+		mvn
+		ninja
+		rust-analyzer
+		rustc
+		sbuild
+		tar
+		tracker-miner-fs-3
+		unrar
+		zip
+	}
+}
+
+exceptions {
+
+}

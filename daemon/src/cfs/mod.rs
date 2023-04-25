@@ -1,8 +1,10 @@
-// Copyright 2021-2022 System76 <info@system76.com>
+// Copyright 2021 System76 <info@system76.com>
 // SPDX-License-Identifier: MPL-2.0
 
-use crate::config::cpu::Config;
-use crate::paths::{SchedPaths, BANDWIDTH_SIZE_PATH};
+pub mod paths;
+
+use crate::config::cfs::Profile;
+use paths::{SchedPaths, BANDWIDTH_SIZE_PATH};
 use std::fmt::Display;
 use std::io::Write;
 use std::{fs, io};
@@ -11,7 +13,7 @@ use std::{fs, io};
 #[allow(clippy::cast_precision_loss)]
 #[allow(clippy::cast_sign_loss)]
 #[allow(clippy::cast_possible_truncation)]
-pub fn tweak(paths: &SchedPaths, conf: &Config) {
+pub fn tweak(paths: &SchedPaths, conf: &Profile) {
     let modifier = latency_modifier(num_cpus::get() as f64);
 
     let min_gran = (modifier as f64 * conf.latency as f64 / conf.nr_latency as f64) as u64;
@@ -23,7 +25,7 @@ pub fn tweak(paths: &SchedPaths, conf: &Config) {
     write_value(BANDWIDTH_SIZE_PATH, conf.bandwidth_size * 1000);
 
     if let Some(preempt_path) = paths.preempt {
-        write_value(preempt_path, &*conf.preempt);
+        write_value(preempt_path, conf.preempt);
     }
 }
 

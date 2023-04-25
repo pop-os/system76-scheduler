@@ -2,43 +2,44 @@
 name = "system76-scheduler"
 description = "Linux service that manages process priorities and CFS scheduler latencies for improved responsiveness on the desktop"
 repository = "https://github.com/pop-os/system76-scheduler"
-version = "1.2.2"
+version = "2.0.0"
 edition = "2021"
 license = "MPL-2.0"
 publish = false
 
 [dependencies]
-anyhow = "1.0.66"
-futures = "0.3.25"
-libc = "0.2.137"
-num_cpus = "1.14.0"
-serde = { version = "1.0.147", features = ["derive"] }
-serde_repr = "0.1.9"
-thiserror = "1.0.37"
-upower_dbus = "0.3.0"
-zbus = "3.4.0"
-zvariant = "3.7.1"
-# ron = "0.7.0"
+anyhow = "1.0.70"
+futures = "0.3.28"
+libc = "0.2.141"
+num_cpus = "1.15.0"
+serde = { version = "1.0.160", features = ["derive"] }
+serde_repr = "0.1.12"
+thiserror = "1.0.40"
+upower_dbus = "0.3.2"
+zbus = { version = "3.11.1", default-features = false, features = ["tokio"] }
+zvariant = "3.12.0"
 tracing = "0.1.37"
 concat-in-place = "1.1.0"
-itoa = "1.0.4"
-fomat-macros = "0.3.1"
+itoa = "1.0.6"
+fomat-macros = "0.3.2"
 ioprio = "0.2.0"
-compact_str = { version = "0.6.1", features = ["serde"] }
+compact_str = { version = "0.7.0", features = ["serde"] }
 execsnoop = { path = "../execsnoop" }
-next-gen = "0.1.1"
-const_format = "0.2.30"
-clap = { version = "4.0.19", features = ["cargo"] }
-
-# Necessary for deserialization of untagged enums in assignments.
-[dependencies.ron]
-git = "https://github.com/MomoLangenstein/ron"
-branch = "253-untagged-enums"
+clap = { version = "4.2.2", features = ["cargo"] }
+system76-scheduler-config = { path = "../config" }
+aho-corasick = "0.7.20"
+memchr = "2.5.0"
+bstr = "1.4.0"
+atoi = "2.0.0"
+system76-scheduler-pipewire = { path = "../pipewire"}
+pipewire = "0.6.0"
+qcell = "0.5.3"
+futures-lite = "1.13.0"
 
 [dependencies.tracing-subscriber]
 version = "0.3.16"
 features = ["env-filter"]
 
 [dependencies.tokio]
-version = "1.21.2"
-features = ["fs", "macros", "rt", "sync", "time"]
+version = "1.27.0"
+features = ["macros", "process", "rt", "sync", "time"]
