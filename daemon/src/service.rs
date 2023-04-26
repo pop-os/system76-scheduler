@@ -269,7 +269,7 @@ impl<'owner> Service<'owner> {
     }
 
     pub fn cfs_apply(&self, config: &crate::config::cfs::Profile) {
-        if self.config.cfs_profiles.enable {
+        if !self.config.cfs_profiles.enable {
             return;
         }
 
