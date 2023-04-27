@@ -74,6 +74,7 @@ async fn pipewire_service(tx: Sender<ProcessEvent>) {
                 SocketEvent::Add(socket) => {
                     if !active_sessions.contains(&socket) {
                         if let Ok(stream) = UnixStream::connect(&socket) {
+                            active_sessions.insert(socket.clone());
                             let tx = tx.clone();
                             let pw_tx = pw_tx.clone();
                             std::thread::spawn(move || {
