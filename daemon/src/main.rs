@@ -198,25 +198,30 @@ async fn daemon(
             let tx = tx.clone();
             let (scheduled_tx, mut scheduled_rx) = tokio::sync::mpsc::unbounded_channel();
             std::thread::spawn(move || {
-                if let Ok(mut watcher) = execsnoop::watch() {
-                    // Listen for spawned process, scheduling them to be handled with a delay of 1 second after creation.
-                    // The delay is to ensure that a process has been added to a cgroup
-                    while let Some(process) = watcher.next() {
-                        let Ok(cmdline) = std::str::from_utf8(process.cmd) else {
-                            continue
-                        };
+                match execsnoop::watch() {
+                    Ok(mut watcher) => {
+                        // Listen for spawned process, scheduling them to be handled with a delay of 1 second after creation.
+                        // The delay is to ensure that a process has been added to a cgroup
+                        while let Some(process) = watcher.next() {
+                            let Ok(cmdline) = std::str::from_utf8(process.cmd) else {
+                                continue
+                            };
 
-                        let name = process::name(cmdline);
+                            let name = process::name(cmdline);
 
-                        let _res = scheduled_tx.send((
-                            Instant::now() + Duration::from_secs(2),
-                            ExecCreate {
-                                pid: process.pid,
-                                parent_pid: process.parent_pid,
-                                name: name.to_owned(),
-                                cmdline: cmdline.to_owned(),
-                            },
-                        ));
+                            let _res = scheduled_tx.send((
+                                Instant::now() + Duration::from_secs(2),
+                                ExecCreate {
+                                    pid: process.pid,
+                                    parent_pid: process.parent_pid,
+                                    name: name.to_owned(),
+                                    cmdline: cmdline.to_owned(),
+                                },
+                            ));
+                        }
+                    },
+                    Err(error) => {
+                        tracing::error!("failed to start execsnoop: {error}");
                     }
                 }
             });
