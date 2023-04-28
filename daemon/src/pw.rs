@@ -150,11 +150,13 @@ pub(crate) async fn monitor(tx: Sender<Event>) {
                         if !managed.insert(pid) {
                             continue;
                         }
+                        tracing::debug!("{pid} started using pipewire");
                     }
                     ProcessEvent::Remove(pid) => {
                         if !managed.remove(&pid) {
                             continue;
                         }
+                        tracing::debug!("{pid} stopped using pipewire");
                     }
                 }
 
