@@ -58,6 +58,8 @@ impl ProcessIterator {
                         parent_pid,
                     });
                 }
+            } else {
+                tracing::error!("failed to parse execsnoop output: {:?}", String::from_utf8_lossy(line));
             }
         }
 
@@ -94,6 +96,7 @@ pub fn watch() -> io::Result<ProcessIterator> {
             io::Error::new(io::ErrorKind::Other, "execsnoop-bpfcc lacks stdout pipe")
         })?;
 
+        tracing::debug!("spawned execsnoop and connected to its stdout");
         let stream = ByteLines::new(BufReader::with_capacity(16 * 1024, stdout));
 
         Ok(ProcessIterator {
