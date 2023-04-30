@@ -47,7 +47,7 @@ In addition to `config.kdl`, additional process scheduling profiles are stored i
 - User-config: `/etc/system76-scheduler/process-scheduler/`
 - Distribution: `/usr/share/system76-scheduler/process-scheduler/`
 
-An [example configuration is provided here](./data/pop-os.kdl). It is parsed the same as the assignments and exceptions nodes in the main config, and profiles can inherit values from the previous assignment of the same name.
+An [example configuration is provided here](./data/pop_os.kdl). It is parsed the same as the assignments and exceptions nodes in the main config, and profiles can inherit values from the previous assignment of the same name.
 
 ### Profile
 
