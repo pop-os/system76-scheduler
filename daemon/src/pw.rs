@@ -106,7 +106,13 @@ pub(crate) async fn monitor(tx: Sender<Event>) {
     loop {
         tokio::time::sleep(Duration::from_secs(3)).await;
 
-        let result = std::process::Command::new("system76-scheduler")
+        let exe_link_target = std::fs::read_link("/proc/self/exe");
+        let Ok(exe) = exe_link_target else {
+            tracing::error!("failed to determine the daemon exe name: {:?}", exe_link_target.err());
+            break;
+        };
+
+        let result = std::process::Command::new(exe)
             .arg("pipewire")
             .stdin(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
