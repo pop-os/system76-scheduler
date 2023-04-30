@@ -12,24 +12,30 @@ use system76_scheduler_config::scheduler::Condition;
 
 pub struct Service<'owner> {
     pub config: crate::config::Config,
+    assign_scan: Vec<u32>,
+    assign_scanned: Vec<u32>,
+    assign_tasks: Vec<u32>,
     cfs_paths: Option<SchedPaths>,
     foreground_processes: Vec<u32>,
     foreground: Option<u32>,
+    owner: LCellOwner<'owner>,
     pipewire_processes: Vec<u32>,
     process_map: process::Map<'owner>,
-    owner: LCellOwner<'owner>,
 }
 
 impl<'owner> Service<'owner> {
     pub fn new(owner: LCellOwner<'owner>) -> Self {
         Self {
-            config: crate::config::Config::default(),
+            assign_scan: Vec::with_capacity(16),
+            assign_scanned: Vec::with_capacity(16),
+            assign_tasks: Vec::with_capacity(16),
             cfs_paths: SchedPaths::new().ok(),
+            config: crate::config::Config::default(),
+            foreground_processes: Vec::with_capacity(256),
             foreground: None,
-            foreground_processes: Vec::with_capacity(128),
+            owner,
             pipewire_processes: Vec::with_capacity(4),
             process_map: process::Map::default(),
-            owner,
         }
     }
 
@@ -144,8 +150,15 @@ impl<'owner> Service<'owner> {
     /// Assigns children of a process in case they've not been assigned.
     pub fn assign_children(&mut self, buffer: &mut Buffer, pid: u32) {
         let mut tasks = Vec::new();
-        let mut scan = vec![pid];
+        let mut scan = Vec::new();
         let mut scanned = Vec::new();
+
+        std::mem::swap(&mut tasks, &mut self.assign_tasks);
+        std::mem::swap(&mut scan, &mut self.assign_scan);
+        std::mem::swap(&mut scanned, &mut self.assign_scanned);
+
+        scanned.clear();
+        scan.push(pid);
 
         while let Some(process) = scan.pop() {
             scanned.push(process);
@@ -159,7 +172,7 @@ impl<'owner> Service<'owner> {
             tasks.push(process);
         }
 
-        for pid in tasks {
+        for pid in tasks.drain(..) {
             if self.process_map.get_pid(&self.owner, pid).is_none() {
                 let Some(parent_pid) = process::parent_id(buffer, pid) else {
                     continue
@@ -174,6 +187,10 @@ impl<'owner> Service<'owner> {
                 self.assign_new_process(buffer, pid, parent_pid, name, cmdline);
             }
         }
+
+        std::mem::swap(&mut tasks, &mut self.assign_tasks);
+        std::mem::swap(&mut scan, &mut self.assign_scan);
+        std::mem::swap(&mut scanned, &mut self.assign_scanned);
     }
 
     /// Assign a priority to a newly-created process, and record that process in the map.

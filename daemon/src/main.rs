@@ -218,7 +218,7 @@ async fn daemon(
                                 },
                             ));
                         }
-                    },
+                    }
                     Err(error) => {
                         tracing::error!("failed to start execsnoop: {error}");
                     }
