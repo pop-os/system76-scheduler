@@ -16,12 +16,16 @@ assignments {
 	games {
 		lutris
 		steam
+		heroic
+		itch
 		vrcompositor
 		vrdashboard
 		vrmonitor
 		vrserver
 		include descends="steam"
 		include descends="lutris"
+		include descends="heroic"
+		include descends="itch"
 	}
 
 	desktop-environment {
@@ -30,6 +34,7 @@ assignments {
 		i3wm
 		kwin
 		sway
+		gamescope
 		Xorg
 	}
 
