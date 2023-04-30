@@ -21,7 +21,7 @@ export RUSTFLAGS := if `which lld || true` != '' {
 }
 
 # Path to execsnoop binary.
-execsnoop := '/usr/sbin/execsnoop-bpfcc'
+execsnoop := `which execsnoop || which execsnoop-bpfcc`
 
 [private]
 default: build-release
