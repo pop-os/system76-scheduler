@@ -20,7 +20,6 @@ mod pw;
 mod service;
 mod utils;
 
-use cfs::paths::SchedPaths;
 use clap::ArgMatches;
 use dbus::{CpuMode, Server};
 use std::time::{Duration, Instant};
@@ -158,7 +157,7 @@ async fn daemon(
         return reload(connection).await;
     }
 
-    let service = &mut service::Service::new(owner, SchedPaths::new()?);
+    let service = &mut service::Service::new(owner);
     service.reload_configuration();
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(4);
