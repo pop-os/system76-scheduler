@@ -270,6 +270,7 @@ async fn daemon(
             }) => {
                 service.assign_new_process(&mut buffer, pid, parent_pid, name, cmdline);
                 service.assign_children(&mut buffer, pid);
+                service.garbage_clean(&mut buffer);
             }
 
             Event::RefreshProcessMap => {
@@ -279,10 +280,12 @@ async fn daemon(
             Event::SetForegroundProcess(pid) => {
                 tracing::debug!("setting {pid} as foreground process");
                 service.set_foreground_process(&mut buffer, pid);
+                service.garbage_clean(&mut buffer);
             }
 
             Event::Pipewire(scheduler_pipewire::ProcessEvent::Add(process)) => {
                 service.set_pipewire_process(&mut buffer, process);
+                service.garbage_clean(&mut buffer);
             }
 
             Event::Pipewire(scheduler_pipewire::ProcessEvent::Remove(process)) => {
