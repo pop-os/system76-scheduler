@@ -18,6 +18,7 @@ pub struct Service<'owner> {
     cfs_paths: Option<SchedPaths>,
     foreground_processes: Vec<u32>,
     foreground: Option<u32>,
+    gc_counter: usize,
     owner: LCellOwner<'owner>,
     pipewire_processes: Vec<u32>,
     process_map: process::Map<'owner>,
@@ -33,6 +34,7 @@ impl<'owner> Service<'owner> {
             config: crate::config::Config::default(),
             foreground_processes: Vec::with_capacity(256),
             foreground: None,
+            gc_counter: 0,
             owner,
             pipewire_processes: Vec::with_capacity(4),
             process_map: process::Map::default(),
@@ -317,6 +319,50 @@ impl<'owner> Service<'owner> {
     pub fn cfs_responsive_config(&self) -> &crate::config::cfs::Profile {
         self.cfs_config("responsive")
             .unwrap_or(&crate::config::cfs::PROFILE_RESPONSIVE)
+    }
+
+    /// Periodically shrinks buffers and removes dead processes to keep total memory consumption low.
+    pub fn garbage_clean(&mut self, buffer: &mut Buffer) {
+        if self.gc_counter < 2048 {
+            self.gc_counter += 1;
+            return;
+        }
+
+        self.gc_counter = 0;
+
+        buffer.shrink();
+
+        let Ok(procfs) = std::fs::read_dir("/proc/") else {
+            tracing::error!("failed to read /proc directory: process monitoring stopped");
+            return;
+        };
+
+        self.process_map.drain_filter_prepare();
+
+        for proc_entry in procfs.filter_map(Result::ok) {
+            let file_name = proc_entry.file_name();
+
+            let mut process = Process::default();
+
+            match atoi::atoi::<u32>(file_name.as_bytes()) {
+                Some(pid) => process.id = pid,
+                None => continue,
+            }
+
+            // Processes without a command line path are kernel threads
+            if process::cmdline(buffer, process.id).is_none() {
+                continue;
+            }
+
+            if let Some(ppid) = process::parent_id(buffer, process.id) {
+                process.parent_id = ppid;
+            }
+
+            self.process_map.retain_process_tree(&self.owner, &process);
+            self.process_map_insert(process);
+        }
+
+        self.process_map.drain_filter(&self.owner);
     }
 
     /// Gets the config-assigned priority of a process.

@@ -23,6 +23,13 @@ impl Buffer {
             itoa: itoa::Buffer::new(),
         }
     }
+
+    /// Shrinks buffers to a reasonable default
+    pub fn shrink(&mut self) {
+        self.path.shrink_to(512);
+        self.file.shrink_to(16384);
+        self.file_raw.shrink_to(16384);
+    }
 }
 
 pub fn read_into_string<P: AsRef<OsStr>>(buf: &mut String, path: P) -> io::Result<&str> {
