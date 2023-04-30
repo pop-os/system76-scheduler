@@ -11,8 +11,20 @@ confdir := clean(rootdir / sysconfdir)
 
 target-bin := bindir / binary
 
+rustflags := env_var_or_default('RUSTFLAGS', '')
+
+# Use the lld linker if it is available.
+export RUSTFLAGS := if `which lld || true` != '' {
+    rustflags + ' -C link-arg=-fuse-ld=lld -C link-arg=-Wl,--build-id=sha1 -Clink-arg=-Wl,--no-rosegment'
+} else {
+    rustflags
+}
+
 # Path to execsnoop binary.
 execsnoop := '/usr/sbin/execsnoop-bpfcc'
+
+[private]
+default: build-release
 
 # Remove Cargo build artifacts
 clean:
