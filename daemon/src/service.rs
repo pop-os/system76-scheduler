@@ -173,7 +173,7 @@ impl<'owner> Service<'owner> {
         }
 
         for pid in tasks.drain(..) {
-            if self.process_map.get_pid(&self.owner, pid).is_none() {
+            if self.process_map.get_pid(pid).is_none() {
                 let Some(parent_pid) = process::parent_id(buffer, pid) else {
                     continue
                 };
@@ -202,7 +202,7 @@ impl<'owner> Service<'owner> {
         name: String,
         mut cmdline: String,
     ) {
-        let parent = self.process_map.get_pid(&self.owner, parent_pid).cloned();
+        let parent = self.process_map.get_pid(parent_pid).cloned();
 
         let mut cgroup = String::new();
 
@@ -322,7 +322,7 @@ impl<'owner> Service<'owner> {
     /// Gets the config-assigned priority of a process.
     #[must_use]
     pub fn process_assignment(&self, pid: u32) -> Priority {
-        let Some(process) = self.process_map.get_pid(&self.owner, pid) else {
+        let Some(process) = self.process_map.get_pid(pid) else {
             return Priority::NotAssignable;
         };
 
@@ -458,14 +458,14 @@ impl<'owner> Service<'owner> {
         }
 
         for (pid, ppid) in parents {
-            if let Some(process) = self.process_map.get_pid(&self.owner, pid) {
-                if let Some(parent) = self.process_map.get_pid(&self.owner, ppid) {
+            if let Some(process) = self.process_map.get_pid(pid) {
+                if let Some(parent) = self.process_map.get_pid(ppid) {
                     process.rw(&mut self.owner).parent = Some(Arc::downgrade(parent));
                 }
             }
         }
 
-        self.process_map.drain_filter();
+        self.process_map.drain_filter(&self.owner);
 
         // Refresh priority assignments
         let mut process_map = process::Map::default();
@@ -529,7 +529,7 @@ impl<'owner> Service<'owner> {
 
         if let Some(pipewire) = self.config.process_scheduler.pipewire.clone() {
             if !self.pipewire_processes.contains(&process) {
-                if let Some(process) = self.process_map.get_pid(&self.owner, process) {
+                if let Some(process) = self.process_map.get_pid(process) {
                     let process = process.ro(&self.owner);
                     if OwnedPriority::Assignable != process.assigned_priority {
                         return;

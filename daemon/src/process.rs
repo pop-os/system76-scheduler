@@ -63,15 +63,20 @@ impl<'owner> Process<'owner> {
 #[derive(Default)]
 pub struct Map<'owner> {
     pub map: HashMap<u64, Arc<LCell<'owner, Process<'owner>>>>,
+    pub pid_map: HashMap<u32, Arc<LCell<'owner, Process<'owner>>>>,
     pub drain: HashSet<u64>,
 }
 
 impl<'owner> Map<'owner> {
     /// Removes processes that remain in the drain filter.
-    pub fn drain_filter(&mut self) {
+    pub fn drain_filter(&mut self, owner: &LCellOwner<'owner>) {
         for hash in self.drain.drain() {
-            self.map.remove(&hash);
+            if let Some(process) = self.map.remove(&hash) {
+                self.pid_map.remove(&process.ro(owner).id);
+            }
         }
+
+        self.map.shrink_to(1024);
     }
 
     /// This will be used to keep track of what processes were destroyed since the last refresh.
@@ -82,14 +87,8 @@ impl<'owner> Map<'owner> {
         }
     }
 
-    pub fn get_pid(
-        &self,
-        token: &LCellOwner<'owner>,
-        pid: u32,
-    ) -> Option<&Arc<LCell<'owner, Process<'owner>>>> {
-        self.map
-            .values()
-            .find(|&process| process.ro(token).id == pid)
+    pub fn get_pid(&self, pid: u32) -> Option<&Arc<LCell<'owner, Process<'owner>>>> {
+        self.pid_map.get(&pid)
     }
 
     pub fn insert(
@@ -117,9 +116,11 @@ impl<'owner> Map<'owner> {
                 entry.get().clone()
             }
             Entry::Vacant(entry) => {
+                let pid = process.id;
                 let process = Arc::new(LCell::new(process));
 
                 entry.insert(process.clone());
+                self.pid_map.insert(pid, process.clone());
                 process
             }
         }
