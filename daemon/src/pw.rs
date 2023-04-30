@@ -114,6 +114,7 @@ pub(crate) async fn monitor(tx: Sender<Event>) {
             .spawn();
 
         let Ok(mut child) = result else {
+            tracing::error!("failed to spawn pipewire watcher: {:?}", result.err());
             continue;
         };
 
