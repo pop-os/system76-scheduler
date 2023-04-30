@@ -12,7 +12,7 @@ use system76_scheduler_config::scheduler::Condition;
 
 pub struct Service<'owner> {
     pub config: crate::config::Config,
-    cfs_paths: SchedPaths,
+    cfs_paths: Option<SchedPaths>,
     foreground_processes: Vec<u32>,
     foreground: Option<u32>,
     pipewire_processes: Vec<u32>,
@@ -21,10 +21,10 @@ pub struct Service<'owner> {
 }
 
 impl<'owner> Service<'owner> {
-    pub fn new(owner: LCellOwner<'owner>, cfs_paths: SchedPaths) -> Self {
+    pub fn new(owner: LCellOwner<'owner>) -> Self {
         Self {
             config: crate::config::Config::default(),
-            cfs_paths,
+            cfs_paths: SchedPaths::new().ok(),
             foreground: None,
             foreground_processes: Vec::with_capacity(128),
             pipewire_processes: Vec::with_capacity(4),
@@ -269,11 +269,15 @@ impl<'owner> Service<'owner> {
     }
 
     pub fn cfs_apply(&self, config: &crate::config::cfs::Profile) {
+        let Some(paths) = &self.cfs_paths else {
+            return;
+        };
+
         if !self.config.cfs_profiles.enable {
             return;
         }
 
-        crate::cfs::tweak(&self.cfs_paths, config);
+        crate::cfs::tweak(paths, config);
     }
 
     pub fn cfs_on_battery(&self, on_battery: bool) {
