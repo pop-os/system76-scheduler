@@ -22,7 +22,10 @@ mod utils;
 
 use clap::ArgMatches;
 use dbus::{CpuMode, Server};
-use std::time::{Duration, Instant};
+use std::{
+    path::Path,
+    time::{Duration, Instant},
+};
 use tokio::sync::mpsc::Sender;
 use upower_dbus::UPowerProxy;
 use zbus::{Connection, PropertyStream};
@@ -193,45 +196,14 @@ async fn daemon(
 
         // Use execsnoop-bpfcc to watch for new processes being created.
         if service.config.process_scheduler.execsnoop {
-            tracing::debug!("monitoring process IDs in realtime with execsnoop");
-            let tx = tx.clone();
-            let (scheduled_tx, mut scheduled_rx) = tokio::sync::mpsc::unbounded_channel();
-            std::thread::spawn(move || {
-                match execsnoop::watch() {
-                    Ok(mut watcher) => {
-                        // Listen for spawned process, scheduling them to be handled with a delay of 1 second after creation.
-                        // The delay is to ensure that a process has been added to a cgroup
-                        while let Some(process) = watcher.next() {
-                            let Ok(cmdline) = std::str::from_utf8(process.cmd) else {
-                                continue
-                            };
-
-                            let name = process::name(cmdline);
-
-                            tracing::debug!("{:?} created by {:?} ({name})", process.pid, process.parent_pid);
-                            let _res = scheduled_tx.send((
-                                Instant::now() + Duration::from_secs(2),
-                                ExecCreate {
-                                    pid: process.pid,
-                                    parent_pid: process.parent_pid,
-                                    name: name.to_owned(),
-                                    cmdline: cmdline.to_owned(),
-                                },
-                            ));
-                        }
-                    }
-                    Err(error) => {
-                        tracing::error!("failed to start execsnoop: {error}");
-                    }
-                }
-            });
-
-            tokio::task::spawn_local(async move {
-                while let Some((delay, process)) = scheduled_rx.recv().await {
-                    tokio::time::sleep_until(delay.into()).await;
-                    let _res = tx.send(Event::ExecCreate(process)).await;
-                }
-            });
+            if Path::new(execsnoop::EXECSNOOP_PATH).exists() {
+                integrate_execsnoop(tx.clone());
+            } else {
+                tracing::warn!(
+                    "install {} to monitor processes in realtime",
+                    execsnoop::EXECSNOOP_PATH
+                );
+            }
         }
 
         // Monitors pipewire-connected processes.
@@ -369,6 +341,52 @@ async fn battery_monitor(mut events: PropertyStream<'_, bool>, tx: Sender<Event>
 fn autogroup_set(enable: bool) {
     const PATH: &str = "/proc/sys/kernel/sched_autogroup_enabled";
     let _res = std::fs::write(PATH, if enable { b"1" } else { b"0" });
+}
+
+/// Listens to exec events from the kernel to get process IDs in realtime.
+fn integrate_execsnoop(tx: Sender<Event>) {
+    tracing::info!("monitoring process IDs in realtime with execsnoop");
+    let (scheduled_tx, mut scheduled_rx) = tokio::sync::mpsc::unbounded_channel();
+    std::thread::spawn(move || {
+        match execsnoop::watch() {
+            Ok(mut watcher) => {
+                // Listen for spawned process, scheduling them to be handled with a delay of 1 second after creation.
+                // The delay is to ensure that a process has been added to a cgroup
+                while let Some(process) = watcher.next() {
+                    let Ok(cmdline) = std::str::from_utf8(process.cmd) else {
+                        continue
+                    };
+
+                    let name = process::name(cmdline);
+
+                    tracing::debug!(
+                        "{:?} created by {:?} ({name})",
+                        process.pid,
+                        process.parent_pid
+                    );
+                    let _res = scheduled_tx.send((
+                        Instant::now() + Duration::from_secs(2),
+                        ExecCreate {
+                            pid: process.pid,
+                            parent_pid: process.parent_pid,
+                            name: name.to_owned(),
+                            cmdline: cmdline.to_owned(),
+                        },
+                    ));
+                }
+            }
+            Err(error) => {
+                tracing::error!("failed to start execsnoop: {error}");
+            }
+        }
+    });
+
+    tokio::task::spawn_local(async move {
+        while let Some((delay, process)) = scheduled_rx.recv().await {
+            tokio::time::sleep_until(delay.into()).await;
+            let _res = tx.send(Event::ExecCreate(process)).await;
+        }
+    });
 }
 
 fn uptime() -> Option<u64> {

@@ -113,6 +113,8 @@ pub(crate) async fn monitor(tx: Sender<Event>) {
             break;
         };
 
+        tracing::debug!("connected to pipewire");
+
         let result = std::process::Command::new(exe)
             .arg("pipewire")
             .stdin(std::process::Stdio::null())
@@ -122,15 +124,17 @@ pub(crate) async fn monitor(tx: Sender<Event>) {
 
         let Ok(mut child) = result else {
             tracing::error!("failed to spawn pipewire watcher: {:?}", result.err());
-            continue;
+            break;
         };
 
         let Some(stdout) = child.stdout.take() else {
-            continue;
+            tracing::error!("pipewire process is missing the stdout pipe");
+            break;
         };
 
         let Ok(stdout) = tokio::process::ChildStdout::from_std(stdout) else {
-            continue;
+            tracing::error!("failed to create tokio stdout from pipewire process");
+            break;
         };
 
         let mut stdout = tokio::io::BufReader::new(stdout);
@@ -164,4 +168,6 @@ pub(crate) async fn monitor(tx: Sender<Event>) {
             }
         }
     }
+
+    tracing::info!("stopped listening to pipewire");
 }
