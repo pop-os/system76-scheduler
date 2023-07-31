@@ -180,6 +180,14 @@ impl FromStr for SchedPolicy {
     }
 }
 
+impl SchedPolicy {
+    /// Whether the policy is realtime (FIFO or RR)
+    #[must_use]
+    pub fn is_realtime(self) -> bool {
+        matches!(self, Self::Fifo | Self::Rr)
+    }
+}
+
 /// A value between 1 and 99
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SchedPriority(u8);
