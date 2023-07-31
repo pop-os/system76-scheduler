@@ -45,7 +45,13 @@ pub fn set(buffer: &mut Buffer, process: u32, profile: &Profile) {
 
 pub fn set_policy(pid: u32, policy: SchedPolicy, sched_priority: SchedPriority) {
     let param = libc::sched_param {
-        sched_priority: libc::c_int::from(sched_priority.get()),
+        sched_priority: libc::c_int::from({
+            if policy.is_realtime() {
+                sched_priority.get()
+            } else {
+                0
+            }
+        }),
     };
 
     unsafe {
