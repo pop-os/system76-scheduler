@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
 fn main() {
-    let watcher = execsnoop::watch().unwrap();
+    let mut watcher = execsnoop::watch().unwrap();
 
-    for process in watcher {
+    while let Some(process) = watcher.next() {
         println!("{:?}", process);
     }
 }
