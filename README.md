@@ -27,7 +27,7 @@ sudo just sysconfdir=/usr/share install
 - Interface: `com.system76.Scheduler`
 - Path: `/com/system76/Scheduler`
 
-The `SetForeground(u32)` method can be called to change the active foreground process.
+The `SetForegroundProcess(u32)` method can be called to change the active foreground process.
 
 ## Scheduler Config
 
