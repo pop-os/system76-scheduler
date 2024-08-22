@@ -2,7 +2,7 @@
 name = "system76-scheduler"
 description = "Linux service that manages process priorities and CFS scheduler latencies for improved responsiveness on the desktop"
 repository = "https://github.com/pop-os/system76-scheduler"
-version = "2.0.1"
+version = "2.0.2"
 edition = "2021"
 license = "MPL-2.0"
 publish = false
