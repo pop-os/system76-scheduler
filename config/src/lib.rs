@@ -43,10 +43,10 @@ pub fn config() -> Config {
 }
 
 /// Locates configuration files of a given extension from the given paths.
-pub fn configuration_files<'a>(
-    paths: &'a [&str],
-    extension: &'a str,
-) -> impl Iterator<Item = String> + 'a {
+pub fn configuration_files(
+    paths: &'static [&'static str],
+    extension: &'static str,
+) -> impl Iterator<Item = String> {
     generator::Gn::new_scoped(move |mut scope| {
         for directory in paths {
             if let Ok(dir) = std::fs::read_dir(directory) {
