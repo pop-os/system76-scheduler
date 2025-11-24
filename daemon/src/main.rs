@@ -189,8 +189,11 @@ async fn daemon(
                 Duration::from_secs(u64::from(service.config.process_scheduler.refresh_rate));
             let tx = tx.clone();
             async move {
-                let _res = tx.send(Event::RefreshProcessMap).await;
-                tokio::time::sleep(refresh_rate).await;
+                let mut interval = tokio::time::interval(refresh_rate);
+                loop {
+                    interval.tick().await;
+                    let _ = tx.send(Event::RefreshProcessMap).await;
+                }
             }
         });
 
