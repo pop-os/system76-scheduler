@@ -9,4 +9,4 @@ publish = false
 atoi = "2.0.0"
 bstr = "1.4.0"
 itoa = "1.0.6"
-pipewire = "0.6.0"
+pipewire = "0.10.0"

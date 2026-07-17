@@ -8,7 +8,7 @@ fn main() {
     std::thread::spawn(move || {
         let file = UnixStream::connect("/run/user/1000/pipewire-0").unwrap();
 
-        processes_from_socket(&OwnedFd::from(file), move |event| {
+        processes_from_socket(OwnedFd::from(file), move |event| {
             let _res = tx.send(event);
         });
     });

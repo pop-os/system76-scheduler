@@ -8,15 +8,14 @@
 use bstr::BStr;
 use pipewire as pw;
 use pw::{
-    node::{Node, NodeInfo},
+    node::{Node, NodeInfoRef},
     proxy::ProxyT,
-    spa::ReadableDict,
 };
 use std::{
     cell::RefCell,
     collections::{BTreeMap, HashMap},
     io,
-    os::unix::prelude::{AsRawFd, OwnedFd},
+    os::unix::prelude::OwnedFd,
     rc::Rc,
     time::Duration,
 };
@@ -25,7 +24,7 @@ use std::{
 #[derive(Debug)]
 pub enum NodeEvent<'a> {
     /// Node info
-    Info(u32, &'a NodeInfo),
+    Info(u32, &'a NodeInfoRef),
     /// Node removal
     Remove(u32),
 }
@@ -81,7 +80,7 @@ pub struct Process {
 impl Process {
     /// Attains process info from a pipewire info node.
     #[must_use]
-    pub fn from_node(info: &NodeInfo) -> Option<Self> {
+    pub fn from_node(info: &NodeInfoRef) -> Option<Self> {
         let props = info.props()?;
         props.get("application.process.binary")?;
 
@@ -94,7 +93,7 @@ impl Process {
 /// Monitors the processes from a given ``PipeWire`` socket.
 ///
 /// ``PipeWire`` sockets are found in `/run/user/{{UID}}/pipewire-0`.
-pub fn processes_from_socket(socket: &OwnedFd, mut func: impl FnMut(ProcessEvent) + 'static) {
+pub fn processes_from_socket(socket: OwnedFd, mut func: impl FnMut(ProcessEvent) + 'static) {
     let mut managed = BTreeMap::new();
 
     let _res = nodes_from_socket(socket, move |event| match event {
@@ -120,22 +119,22 @@ pub fn processes_from_socket(socket: &OwnedFd, mut func: impl FnMut(ProcessEvent
 ///
 /// Errors if the pipewire connection fails
 pub fn nodes_from_socket(
-    socket: &OwnedFd,
+    socket: OwnedFd,
     func: impl FnMut(NodeEvent) + 'static,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let main_loop = pw::MainLoop::new()?;
-    let context = pw::Context::new(&main_loop)?;
-    let core = context.connect_fd(socket.as_raw_fd(), None)?;
+    let main_loop = pw::main_loop::MainLoopRc::new(None)?;
+    let context = pw::context::ContextRc::new(&main_loop, None)?;
+    let core = context.connect_fd_rc(socket, None)?;
 
-    let registry = Rc::new(core.get_registry()?);
-    let registry_weak = Rc::downgrade(&registry);
+    let registry = core.get_registry_rc()?;
+    let registry_weak = registry.downgrade();
 
     let nodes = Rc::new(RefCell::new(HashMap::new()));
     let func = Rc::new(RefCell::new(func));
 
     let remove_ids = Rc::new(RefCell::new(Vec::new()));
 
-    let garbage_collector = main_loop.add_timer({
+    let garbage_collector = main_loop.loop_().add_timer({
         let nodes = Rc::downgrade(&nodes);
         let remove_ids = Rc::downgrade(&remove_ids);
         move |_| {

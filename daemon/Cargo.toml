@@ -32,7 +32,7 @@ memchr = "2.5.0"
 bstr = "1.4.0"
 atoi = "2.0.0"
 system76-scheduler-pipewire = { path = "../pipewire"}
-pipewire = "0.6.0"
+pipewire = "0.10.0"
 qcell = "0.5.3"
 futures-lite = "1.13.0"
 

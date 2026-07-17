@@ -78,7 +78,7 @@ async fn pipewire_service(tx: Sender<ProcessEvent>) {
                             let tx = tx.clone();
                             let pw_tx = pw_tx.clone();
                             std::thread::spawn(move || {
-                                processes_from_socket(&OwnedFd::from(stream), move |event| {
+                                processes_from_socket(OwnedFd::from(stream), move |event| {
                                     let _res = tx.blocking_send(event);
                                 });
 
