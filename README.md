@@ -102,6 +102,16 @@ Each child element of a profile defines th process(es) to assign to the profile.
 
 ## CPU Scheduler Latency Configurations
 
+System76 Scheduler switches between these profiles depending on whether the computer is plugged into AC power. `default` is used when on battery, `responsive` on AC power.
+
+To check which one is currently in use run `journalctl -u com.system76.Scheduler` and look for lines like:
+
+```bash
+Starting com.system76.Scheduler.service - Automatically configure CPU scheduler for responsiveness on AC.
+```
+
+To switch between profiles manually ... WHAT SHOULD GO HERE? ... 
+
 ### Default
 
 The default settings for CFS by the Linux kernel. Achieves a high level of throughput for CPU-bound tasks at the cost of increased latency for inputs. This setting is ideal for servers and laptops on battery, because low-latency scheduling sacrifices some energy efficiency for improved responsiveness.
