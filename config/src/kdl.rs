@@ -18,8 +18,6 @@ pub trait NodeExt {
 
     fn get_bool(&self, index: impl Into<NodeKey>) -> Option<bool>;
 
-    fn get_string(&self, index: impl Into<NodeKey>) -> Option<&str>;
-
     fn get_u16(&self, index: impl Into<NodeKey>) -> Option<u16>;
 }
 
@@ -30,10 +28,6 @@ impl NodeExt for KdlNode {
 
     fn get_bool(&self, index: impl Into<NodeKey>) -> Option<bool> {
         self.get(index)?.value().as_bool()
-    }
-
-    fn get_string(&self, index: impl Into<NodeKey>) -> Option<&str> {
-        self.get(index)?.value().as_string()
     }
 
     fn get_u16(&self, index: impl Into<NodeKey>) -> Option<u16> {

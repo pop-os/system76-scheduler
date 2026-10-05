@@ -18,7 +18,7 @@ Requires dependencies as defined in the [debian/control](./debian/control) file:
 Then the included justfile can be used to build and install:
 
 ```sh
-just execsnoop=$(which execsnoop-bpfcc) build-release
+just build-release
 sudo just sysconfdir=/usr/share install
 ```
 

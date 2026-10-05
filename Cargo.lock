@@ -268,16 +268,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bytelines"
-version = "2.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "784face321c535fcd9a1456632fa720aa53ea0640b57341d961c8c09de2da59f"
-dependencies = [
- "futures",
- "tokio",
-]
-
-[[package]]
 name = "byteorder"
 version = "1.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -550,11 +540,10 @@ checksum = "0206175f82b8d6bf6652ff7d71a1e27fd2e4efde587fd368662814d6ec1d9ce0"
 
 [[package]]
 name = "execsnoop"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "atoi",
- "bstr",
- "bytelines",
+ "libc",
  "tracing",
 ]
 
