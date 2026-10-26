@@ -53,7 +53,6 @@ process-scheduler enable=true {
 
         // Session services belonging to the user
         session-services nice=9 io="idle" {
-            include cgroup="/user.slice/*.service" parent="systemd"
             include cgroup="/user.slice/*/session.slice/*" parent="systemd"
             exclude cgroup="/user.slice/*app-dbus*"
         }
