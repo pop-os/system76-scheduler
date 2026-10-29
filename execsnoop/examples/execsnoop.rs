@@ -5,6 +5,12 @@ fn main() {
     let mut watcher = execsnoop::watch().unwrap();
 
     while let Some(process) = watcher.next() {
-        println!("{:?}", process);
+        println!(
+            "{} {} {} {}",
+            process.pid,
+            process.parent_pid,
+            String::from_utf8_lossy(process.name),
+            String::from_utf8_lossy(process.cmd)
+        );
     }
 }

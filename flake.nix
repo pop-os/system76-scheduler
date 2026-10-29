@@ -41,7 +41,6 @@
         };
 
         LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
-        EXECSNOOP_PATH = "${pkgs.bcc}/bin/execsnoop";
 
         # tests don't build
         doCheck = false;

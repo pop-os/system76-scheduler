@@ -20,9 +20,6 @@ export RUSTFLAGS := if `which lld || true` != '' {
     rustflags
 }
 
-# Path to execsnoop binary.
-execsnoop := `which execsnoop || which execsnoop-bpfcc || echo /usr/sbin/execsnoop-bpfcc`
-
 [private]
 default: build-release
 
@@ -36,7 +33,7 @@ distclean:
 
 # Compile with debug profile
 build-debug *args:
-    env EXECSNOOP_PATH={{execsnoop}} cargo build {{args}}
+    cargo build {{args}}
 
 # Compile with release profile
 build-release *args: (build-debug '--release' args)
@@ -46,7 +43,7 @@ build-vendored *args: vendor-extract (build-release '--frozen --offline' args)
 
 # Check for errors and linter warnings
 check *args:
-    env EXECSNOOP_PATH={{execsnoop}} cargo clippy --all-features {{args}} -- -W clippy::pedantic
+    cargo clippy --all-features {{args}} -- -W clippy::pedantic
 
 # Runs a check with JSON message format for IDE integration
 check-json: (check '--message-format=json')

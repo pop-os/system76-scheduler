@@ -13,7 +13,7 @@ use std::{borrow::Cow, str::FromStr};
 pub struct Config {
     /// Enables process scheduling
     pub enable: bool,
-    /// Enables execsnoop
+    /// Enables realtime process monitoring with the kernel's process events connector
     pub execsnoop: bool,
     /// Defines the refresh rate for polling processes
     pub refresh_rate: u16,
