@@ -367,7 +367,7 @@ impl<'owner> Service<'owner> {
 
     /// Gets the config-assigned priority of a process.
     #[must_use]
-    pub fn process_assignment(&self, pid: u32) -> Priority {
+    pub fn process_assignment(&self, pid: u32) -> Priority<'_> {
         let Some(process) = self.process_map.get_pid(pid) else {
             return Priority::NotAssignable;
         };
@@ -652,7 +652,7 @@ pub enum OwnedPriority {
 }
 
 impl OwnedPriority {
-    fn as_ref(&self) -> Priority {
+    fn as_ref(&self) -> Priority<'_> {
         match self {
             Self::Assignable => Priority::Assignable,
             Self::Config(profile) => Priority::Config(profile),

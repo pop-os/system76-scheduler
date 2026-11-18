@@ -22,10 +22,7 @@ mod utils;
 
 use clap::ArgMatches;
 use dbus::{CpuMode, Server};
-use std::{
-    path::Path,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc::Sender;
 use upower_dbus::UPowerProxy;
 use zbus::{Connection, PropertyStream};
@@ -197,16 +194,9 @@ async fn daemon(
             }
         });
 
-        // Use execsnoop-bpfcc to watch for new processes being created.
+        // Watch for new processes being created with the kernel's process events connector.
         if service.config.process_scheduler.execsnoop {
-            if Path::new(execsnoop::EXECSNOOP_PATH).exists() {
-                integrate_execsnoop(tx.clone());
-            } else {
-                tracing::warn!(
-                    "install {} to monitor processes in realtime",
-                    execsnoop::EXECSNOOP_PATH
-                );
-            }
+            integrate_execsnoop(tx.clone());
         }
 
         // Monitors pipewire-connected processes.
@@ -348,7 +338,7 @@ fn autogroup_set(enable: bool) {
 
 /// Listens to exec events from the kernel to get process IDs in realtime.
 fn integrate_execsnoop(tx: Sender<Event>) {
-    tracing::info!("monitoring process IDs in realtime with execsnoop");
+    tracing::info!("monitoring process IDs in realtime with the process events connector");
     let (scheduled_tx, mut scheduled_rx) = tokio::sync::mpsc::unbounded_channel();
     std::thread::spawn(move || {
         match execsnoop::watch() {
@@ -356,8 +346,12 @@ fn integrate_execsnoop(tx: Sender<Event>) {
                 // Listen for spawned process, scheduling them to be handled with a delay of 1 second after creation.
                 // The delay is to ensure that a process has been added to a cgroup
                 while let Some(process) = watcher.next() {
-                    let Ok(cmdline) = std::str::from_utf8(process.cmd) else {
-                        continue
+                    // The executed path, cut like `process::cmdline` does for the periodic refresh.
+                    let Some(cmdline) = std::str::from_utf8(process.cmd)
+                        .ok()
+                        .and_then(|cmd| cmd.split_whitespace().next())
+                    else {
+                        continue;
                     };
 
                     let name = process::name(cmdline);
@@ -379,7 +373,7 @@ fn integrate_execsnoop(tx: Sender<Event>) {
                 }
             }
             Err(error) => {
-                tracing::error!("failed to start execsnoop: {error}");
+                tracing::error!("failed to listen to process events: {error}");
             }
         }
     });

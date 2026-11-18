@@ -21,7 +21,7 @@ process-scheduler enable=true {
     // How often to reload process assignments. 0 to disable
     refresh-rate 60
 
-    // Enable realtime process priority adjustment with execsnoop
+    // Enable realtime process priority adjustment with the kernel's process events connector
     execsnoop true
 
     // Preset process assignment profiles
