@@ -33,7 +33,11 @@ pub fn set(buffer: &mut Buffer, process: u32, profile: &Profile) {
             }
         }
 
-        set_policy(process, profile.sched_policy, profile.sched_priority);
+        // Only touch the policy when the profile sets one, so realtime
+        // threads granted by rtkit (e.g. PipeWire) are not reset to SCHED_OTHER.
+        if let Some(policy) = profile.sched_policy {
+            set_policy(process, policy, profile.sched_priority);
+        }
 
         #[allow(clippy::cast_possible_wrap)]
         let _res = ioprio::set_priority(
