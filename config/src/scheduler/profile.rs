@@ -15,8 +15,8 @@ pub struct Profile {
     pub nice: Option<Niceness>,
     /// I/O priority class
     pub io: ioprio::Class,
-    /// Scheduler policy for a process
-    pub sched_policy: SchedPolicy,
+    /// Scheduler policy for a process; `None` leaves the current policy untouched
+    pub sched_policy: Option<SchedPolicy>,
     /// Scheduler policy priority
     pub sched_priority: SchedPriority,
 }
@@ -28,7 +28,7 @@ impl Profile {
             name,
             nice: None,
             io: ioprio::Class::BestEffort(ioprio::BePriorityLevel::lowest()),
-            sched_policy: SchedPolicy::Other,
+            sched_policy: None,
             sched_priority: SchedPriority(1),
         }
     }

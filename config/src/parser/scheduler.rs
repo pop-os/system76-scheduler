@@ -282,7 +282,7 @@ impl Profile {
                 return
             };
 
-            self.sched_policy = policy;
+            self.sched_policy = Some(policy);
             self.sched_priority = SchedPriority::from(priority);
 
             return;
@@ -293,6 +293,30 @@ impl Profile {
             return
         };
 
-        self.sched_policy = policy;
+        self.sched_policy = Some(policy);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::scheduler::SchedPolicy;
+
+    fn profile(kdl: &str) -> Profile {
+        let doc: kdl::KdlDocument = kdl.parse().unwrap();
+        Profile::new(Arc::from("test")).parse(&doc.nodes()[0])
+    }
+
+    #[test]
+    fn sched_policy_is_only_set_when_configured() {
+        assert_eq!(profile("p nice=-15").sched_policy, None);
+        assert_eq!(
+            profile("p sched=\"batch\"").sched_policy,
+            Some(SchedPolicy::Batch)
+        );
+        assert_eq!(
+            profile("p sched=(fifo)49").sched_policy,
+            Some(SchedPolicy::Fifo)
+        );
     }
 }
