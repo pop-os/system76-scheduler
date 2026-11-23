@@ -28,9 +28,9 @@ process-scheduler enable=true {
     assignments {
         // Prevent crackling and distortion from the sound server
         sound-server sched=(fifo)60 nice=-15 io=(realtime)0 {
-            "/usr/bin/pipewire" sched=(fifo)88
-            "/usr/bin/pipewire-pulse"
-            "/usr/bin/jackd"
+            pipewire sched=(fifo)88
+            pipewire-pulse
+            jackd
         }
 
         // Applications with realtime audio processing needs
