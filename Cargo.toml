@@ -1,2 +1,5 @@
 [workspace]
 members = ["config", "daemon", "execsnoop", "pipewire"]
+
+[profile.release]
+lto = true
